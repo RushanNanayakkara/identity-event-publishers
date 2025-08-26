@@ -85,7 +85,6 @@ public class ClientManager {
     private final CloseableHttpAsyncClient httpAsyncClient;
     private final CloseableHttpClient httpClient;
     private CloseableHttpClient mtlsHttpClient = null;
-    private static final int MAX_RETRIES = 2;
     /**
      * Global executor used for asynchronous callbacks.
      */
@@ -133,21 +132,19 @@ public class ClientManager {
                 mtlsHttpClient = getMTLSClient();
             }
 
-            int poolSize = 10; // number of worker threads
-            int queueCapacity = 150; // maximum queued callbacks
-
             // Custom handler that logs when the queue is full and discards the task.
             RejectedExecutionHandler handler = (r, executor) -> {
-                LOG.info("Async callback queue is full; discarding task of publishing events.");
+                LOG.warn("Async callback queue is full; discarding task of publishing events.");
                 // the task is silently dropped
             };
 
             this.asyncCallbackExecutor = new ThreadPoolExecutor(
-                    poolSize,
-                    poolSize,
+                    WebSubHubAdapterDataHolder.getInstance().getAdapterConfiguration().getExecutorCorePoolSize(),
+                    WebSubHubAdapterDataHolder.getInstance().getAdapterConfiguration().getExecutorMaxPoolSize(),
                     0L,
                     TimeUnit.MILLISECONDS,
-                    new ArrayBlockingQueue<>(queueCapacity),
+                    new ArrayBlockingQueue<>(WebSubHubAdapterDataHolder.getInstance().getAdapterConfiguration()
+                            .getExecutorQueueCapacity()),
                     Executors.defaultThreadFactory(),
                     handler);
         } catch (IOException e) {
@@ -173,7 +170,7 @@ public class ClientManager {
      */
     public int getMaxRetries() {
 
-        return MAX_RETRIES;
+        return WebSubHubAdapterDataHolder.getInstance().getAdapterConfiguration().getMaxRetries();
     }
 
     private CloseableHttpClient getMTLSClient() throws WebSubAdapterException {
@@ -297,7 +294,8 @@ public class ClientManager {
                             .getHTTPConnectionTimeout())
                     .setSoTimeout(
                             WebSubHubAdapterDataHolder.getInstance().getAdapterConfiguration().getHttpReadTimeout())
-                    .setIoThreadCount(5)
+                    .setIoThreadCount(
+                            WebSubHubAdapterDataHolder.getInstance().getAdapterConfiguration().getIoThreadCount())
                     .build();
 
             ConnectingIOReactor ioReactor = new DefaultConnectingIOReactor(ioReactorConfig);

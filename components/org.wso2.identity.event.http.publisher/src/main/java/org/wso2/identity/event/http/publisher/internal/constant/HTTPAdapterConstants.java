@@ -31,13 +31,17 @@ public class HTTPAdapterConstants {
     public static class Http {
 
         public static final String HMAC_SHA256_ALGORITHM = "HmacSHA256";
-        public static final String CORRELATION_ID_REQUEST_HEADER = "activityid";
         public static final String X_WSO2_EVENT_SIGNATURE = "x-wso2-event-signature";
         public static final Integer DEFAULT_HTTP_CONNECTION_TIMEOUT = 300;
         public static final Integer DEFAULT_HTTP_READ_TIMEOUT = 300;
         public static final Integer DEFAULT_HTTP_CONNECTION_REQUEST_TIMEOUT = 300;
         public static final Integer DEFAULT_HTTP_MAX_CONNECTIONS = 20;
         public static final Integer DEFAULT_HTTP_MAX_CONNECTIONS_PER_ROUTE = 2;
+        public static final Integer DEFAULT_HTTP_MAX_RETRIES = 2;
+        public static final Integer DEFAULT_HTTP_IO_THREAD_COUNT = 5;
+        public static final Integer DEFAULT_HTTP_EXECUTOR_CORE_POOL_SIZE = 5;
+        public static final Integer DEFAULT_HTTP_EXECUTOR_MAX_POOL_SIZE = 15;
+        public static final Integer DEFAULT_HTTP_EXECUTOR_QUEUE_CAPACITY = 150;
 
         private Http() {
 

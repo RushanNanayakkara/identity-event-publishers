@@ -145,15 +145,17 @@ public class HTTPEventPublisherImpl implements EventPublisher {
                                     "Publish attempt failed with status code: " + status +
                                             ". Retrying… (" + retriesLeft + " attempts left)");
                             sendWithRetries(eventPayload, eventContext, url, secret, retriesLeft - 1);
+                        } else {
+                            handleResponseCorrelationLog(request, requestStartTime,
+                                    HTTPCorrelationLogUtils.RequestStatus.FAILED.getStatus(),
+                                    String.valueOf(status), response.getStatusLine().getReasonPhrase());
+                            printPublisherDiagnosticLog(eventContext, eventPayload, url,
+                                    HTTPAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
+                                    DiagnosticLog.ResultStatus.FAILED,
+                                    "Failed to publish event data to endpoint. Status code: " + status +
+                                            ". Maximum retries reached.");
+                            log.warn("Failed to publish event data to endpoint: " + url + ". Maximum retries reached.");
                         }
-                        handleResponseCorrelationLog(request, requestStartTime,
-                                HTTPCorrelationLogUtils.RequestStatus.FAILED.getStatus(),
-                                String.valueOf(status), response.getStatusLine().getReasonPhrase());
-                        printPublisherDiagnosticLog(eventContext, eventPayload, url,
-                                HTTPAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
-                                DiagnosticLog.ResultStatus.FAILED,
-                                "Failed to publish event data to endpoint. Status code: " + status +
-                                        ". Maximum retries reached.");
                     }
                 } else {
                     if (retriesLeft > 0) {
@@ -163,16 +165,17 @@ public class HTTPEventPublisherImpl implements EventPublisher {
                                 "Publish attempt failed due to exception. Retrying… (" +
                                         retriesLeft + " attempts left)");
                         sendWithRetries(eventPayload, eventContext, url, secret, retriesLeft - 1);
+                    } else {
+                        handleResponseCorrelationLog(request, requestStartTime,
+                                HTTPCorrelationLogUtils.RequestStatus.FAILED.getStatus(),
+                                throwable.getMessage());
+                        printPublisherDiagnosticLog(eventContext, eventPayload, url,
+                                HTTPAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
+                                DiagnosticLog.ResultStatus.FAILED,
+                                "Failed to publish event data to endpoint. Maximum retries reached.");
+                        log.warn("Failed to publish event data to endpoint: " + url + ". Maximum retries reached.");
+                        log.debug("Failed to publish event data to endpoint: " + url, throwable);
                     }
-                    handleResponseCorrelationLog(request, requestStartTime,
-                            HTTPCorrelationLogUtils.RequestStatus.FAILED.getStatus(),
-                            throwable.getMessage());
-                    printPublisherDiagnosticLog(eventContext, eventPayload, url,
-                            HTTPAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
-                            DiagnosticLog.ResultStatus.FAILED,
-                            "Failed to publish event data to endpoint. Maximum retries reached.");
-                    log.warn("Failed to publish event data to endpoint: " + url + "Maximum retries reached.");
-                    log.debug("Failed to publish event data to endpoint: " + url, throwable);
                 }
             } finally {
                 if (StringUtils.isNotEmpty(correlationId)) {

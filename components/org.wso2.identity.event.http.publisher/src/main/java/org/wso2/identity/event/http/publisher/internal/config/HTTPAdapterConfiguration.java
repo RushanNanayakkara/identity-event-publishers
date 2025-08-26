@@ -34,13 +34,23 @@ public class HTTPAdapterConfiguration {
     private static final String HTTP_CONNECTION_REQUEST_TIMEOUT = "httpConnectionRequestTimeout";
     private static final String DEFAULT_MAX_CONNECTIONS = "defaultMaxConnections";
     private static final String DEFAULT_MAX_CONNECTIONS_PER_ROUTE = "defaultMaxConnectionsPerRoute";
+    private static final String MAX_RETRIES = "maxRetries";
+    private static final String IO_THREAD_COUNT = "ioThreadCount";
+    private static final String EXECUTOR_CORE_POOL_SIZE = "executorCorePoolSize";
+    private static final String EXECUTOR_MAX_POOL_SIZE = "executorMaxPoolSize";
+    private static final String EXECUTOR_QUEUE_CAPACITY = "executorQueueCapacity";
+
     private final boolean adapterEnabled;
     private final int httpConnectionTimeout;
     private final int httpReadTimeout;
     private final int httpConnectionRequestTimeout;
     private final int defaultMaxConnections;
     private final int defaultMaxConnectionsPerRoute;
-
+    private final int maxRetries;
+    private final int ioThreadCount;
+    private final int executorCorePoolSize;
+    private final int executorMaxPoolSize;
+    private final int executorQueueCapacity;
 
     /**
      * Initialize the {@link HTTPAdapterConfiguration}.
@@ -67,6 +77,21 @@ public class HTTPAdapterConfiguration {
         this.defaultMaxConnectionsPerRoute = parseIntOrDefault(
                 properties.get(DEFAULT_MAX_CONNECTIONS_PER_ROUTE),
                 HTTPAdapterConstants.Http.DEFAULT_HTTP_MAX_CONNECTIONS_PER_ROUTE);
+        this.maxRetries = parseIntOrDefault(
+                properties.get(MAX_RETRIES),
+                HTTPAdapterConstants.Http.DEFAULT_HTTP_MAX_RETRIES);
+        this.ioThreadCount = parseIntOrDefault(
+                properties.get(IO_THREAD_COUNT),
+                HTTPAdapterConstants.Http.DEFAULT_HTTP_IO_THREAD_COUNT);
+        this.executorCorePoolSize = parseIntOrDefault(
+                properties.get(EXECUTOR_CORE_POOL_SIZE),
+                HTTPAdapterConstants.Http.DEFAULT_HTTP_EXECUTOR_CORE_POOL_SIZE);
+        this.executorMaxPoolSize = parseIntOrDefault(
+                properties.get(EXECUTOR_MAX_POOL_SIZE),
+                HTTPAdapterConstants.Http.DEFAULT_HTTP_EXECUTOR_MAX_POOL_SIZE);
+        this.executorQueueCapacity = parseIntOrDefault(
+                properties.get(EXECUTOR_QUEUE_CAPACITY),
+                HTTPAdapterConstants.Http.DEFAULT_HTTP_EXECUTOR_QUEUE_CAPACITY);
     }
 
     private int parseIntOrDefault(String value, int defaultValue) {
@@ -136,5 +161,55 @@ public class HTTPAdapterConfiguration {
     public int getDefaultMaxConnectionsPerRoute() {
 
         return defaultMaxConnectionsPerRoute;
+    }
+
+    /**
+     * Returns max retries for HTTP requests.
+     *
+     * @return max retries.
+     */
+    public int getMaxRetries() {
+
+        return maxRetries;
+    }
+
+    /**
+     * Returns IO thread count for the async HTTP reactor.
+     *
+     * @return IO thread count.
+     */
+    public int getIoThreadCount() {
+
+        return ioThreadCount;
+    }
+
+    /**
+     * Returns the async callback executor core pool size.
+     *
+     * @return pool size.
+     */
+    public int getExecutorCorePoolSize() {
+
+        return executorCorePoolSize;
+    }
+
+    /**
+     * Returns the async callback executor max pool size.
+     *
+     * @return pool size.
+     */
+    public int getExecutorMaxPoolSize() {
+
+        return executorMaxPoolSize;
+    }
+
+    /**
+     * Returns the async callback executor queue capacity.
+     *
+     * @return queue capacity.
+     */
+    public int getExecutorQueueCapacity() {
+
+        return executorQueueCapacity;
     }
 }

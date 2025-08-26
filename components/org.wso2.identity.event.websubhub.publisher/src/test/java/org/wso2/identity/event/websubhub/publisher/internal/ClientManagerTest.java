@@ -54,6 +54,10 @@ public class ClientManagerTest {
         when(mockConfiguration.getHTTPConnectionTimeout()).thenReturn(3000);
         when(mockConfiguration.getHttpConnectionRequestTimeout()).thenReturn(3000);
         when(mockConfiguration.getHttpReadTimeout()).thenReturn(3000);
+        when(mockConfiguration.isMtlsEnabled()).thenReturn(false);
+        when(mockConfiguration.getExecutorCorePoolSize()).thenReturn(2);
+        when(mockConfiguration.getExecutorMaxPoolSize()).thenReturn(4);
+        when(mockConfiguration.getExecutorQueueCapacity()).thenReturn(10);
 
         clientManager = new ClientManager();
     }
@@ -73,6 +77,7 @@ public class ClientManagerTest {
         Object payload = new Object() {
             @Override
             public String toString() {
+
                 throw new RuntimeException("Simulated IOException trigger");
             }
         };

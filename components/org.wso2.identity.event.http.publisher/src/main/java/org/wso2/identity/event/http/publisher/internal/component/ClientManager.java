@@ -73,7 +73,6 @@ public class ClientManager {
 
     private static final Log LOG = LogFactory.getLog(ClientManager.class);
     private final CloseableHttpAsyncClient httpAsyncClient;
-    private static final int MAX_RETRIES = 2;
     /**
      * Global executor used for asynchronous callbacks.
      */
@@ -92,7 +91,7 @@ public class ClientManager {
                             .getHTTPConnectionTimeout())
                     .setSoTimeout(
                             HTTPAdapterDataHolder.getInstance().getAdapterConfiguration().getHttpReadTimeout())
-                    .setIoThreadCount(5)
+                    .setIoThreadCount(HTTPAdapterDataHolder.getInstance().getAdapterConfiguration().getIoThreadCount())
                     .build();
             ConnectingIOReactor ioReactor = new DefaultConnectingIOReactor(ioReactorConfig);
             PoolingNHttpClientConnectionManager asyncConnectionManager =
@@ -117,21 +116,19 @@ public class ClientManager {
                     asyncConnectionManager.getMaxTotal() + ", maxConnectionsPerRoute=" +
                     asyncConnectionManager.getDefaultMaxPerRoute());
 
-            int poolSize = 10; // number of worker threads
-            int queueCapacity = 150; // maximum queued callbacks
-
             // Custom handler that logs when the queue is full and discards the task.
             RejectedExecutionHandler handler = (r, executor) -> {
-                LOG.info("Async callback queue is full; discarding task of publishing events.");
+                LOG.warn("Async callback queue is full; discarding task of publishing events.");
                 // the task is silently dropped
             };
 
             this.asyncCallbackExecutor = new ThreadPoolExecutor(
-                    poolSize,
-                    poolSize,
+                    HTTPAdapterDataHolder.getInstance().getAdapterConfiguration().getExecutorCorePoolSize(),
+                    HTTPAdapterDataHolder.getInstance().getAdapterConfiguration().getExecutorMaxPoolSize(),
                     0L,
                     TimeUnit.MILLISECONDS,
-                    new ArrayBlockingQueue<>(queueCapacity),
+                    new ArrayBlockingQueue<>(HTTPAdapterDataHolder.getInstance().getAdapterConfiguration()
+                            .getExecutorQueueCapacity()),
                     Executors.defaultThreadFactory(),
                     handler);
         } catch (IOException e) {
@@ -156,7 +153,7 @@ public class ClientManager {
      */
     public int getMaxRetries() {
 
-        return MAX_RETRIES;
+        return HTTPAdapterDataHolder.getInstance().getAdapterConfiguration().getMaxRetries();
     }
 
     public CloseableHttpAsyncClient getHttpAsyncClient() {
