@@ -42,7 +42,6 @@ import org.wso2.identity.event.websubhub.publisher.internal.WebSubHubAdapterData
 import org.wso2.identity.event.websubhub.publisher.util.WebSubHubCorrelationLogUtils;
 
 import java.io.IOException;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils.CORRELATION_ID_MDC;
@@ -90,7 +89,7 @@ public class WebSubEventPublisherImpl implements EventPublisher {
             final String bodyJson = MAPPER.writeValueAsString(eventPayload);
 
             final String correlationId = getCorrelationID(eventPayload);
-            final String tenantDomain = eventContext.getTenantDomain() + "-" + UUID.randomUUID();
+            final String tenantDomain = eventContext.getTenantDomain();
 
             final String eventProfileName = eventContext.getEventProfileName();
             final String eventProfileUri = eventContext.getEventUri();
