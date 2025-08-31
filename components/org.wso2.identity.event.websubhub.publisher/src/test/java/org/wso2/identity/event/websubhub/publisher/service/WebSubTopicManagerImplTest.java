@@ -125,7 +125,7 @@ public class WebSubTopicManagerImplTest {
                                 any(HttpPost.class), anyLong(), anyString(), anyString(), anyString()))
                 .thenAnswer(invocation -> null);
 
-        when(mockClientManager.createHttpPost(anyString(), any())).thenReturn(mockHttpPost);
+        when(mockClientManager.createHttpPost(anyString(), any(), any())).thenReturn(mockHttpPost);
         when(mockClientManager.execute(any(HttpPost.class))).thenReturn(mockHttpResponse);
         when(mockHttpResponse.getStatusLine()).thenReturn(mockStatusLine);
         when(mockHttpResponse.getEntity()).thenReturn(mockEntity);
@@ -172,7 +172,7 @@ public class WebSubTopicManagerImplTest {
 
         when(mockStatusLine.getStatusCode()).thenReturn(HttpStatus.SC_OK);
         webSubTopicManager.registerTopic("test-topic", "carbon.super");
-        verify(mockClientManager).createHttpPost(anyString(), any());
+        verify(mockClientManager).createHttpPost(anyString(), any(), any());
         verify(mockClientManager).execute(any(HttpPost.class));
     }
 
@@ -181,7 +181,7 @@ public class WebSubTopicManagerImplTest {
 
         when(mockStatusLine.getStatusCode()).thenReturn(HttpStatus.SC_OK);
         webSubTopicManager.deregisterTopic("test-topic", "carbon.super");
-        verify(mockClientManager).createHttpPost(anyString(), any());
+        verify(mockClientManager).createHttpPost(anyString(), any(), any());
         verify(mockClientManager).execute(any(HttpPost.class));
         mockedStaticUtil.verify(WebSubHubAdapterUtil::getWebSubBaseURL);
         mockedStaticUtil.verify(

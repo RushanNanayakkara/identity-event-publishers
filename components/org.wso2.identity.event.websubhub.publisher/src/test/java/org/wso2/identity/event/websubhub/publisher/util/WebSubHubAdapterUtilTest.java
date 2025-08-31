@@ -20,6 +20,7 @@ package org.wso2.identity.event.websubhub.publisher.util;
 
 import org.testng.Assert;
 import org.testng.annotations.Test;
+import org.wso2.carbon.identity.event.publisher.api.model.SecurityEventTokenPayload;
 import org.wso2.identity.event.websubhub.publisher.constant.WebSubHubAdapterConstants;
 import org.wso2.identity.event.websubhub.publisher.exception.WebSubAdapterClientException;
 import org.wso2.identity.event.websubhub.publisher.exception.WebSubAdapterServerException;
@@ -32,7 +33,14 @@ public class WebSubHubAdapterUtilTest {
     @Test
     public void testGetCorrelationID() {
 
-        String correlationId = WebSubHubAdapterUtil.getCorrelationID();
+        SecurityEventTokenPayload payload = SecurityEventTokenPayload.builder()
+                .iss("issuer")
+                .jti("jti-token")
+                .iat(System.currentTimeMillis())
+                .aud("audience")
+                .rci("test-correlation-id")
+                .build();
+        String correlationId = WebSubHubAdapterUtil.getCorrelationID(payload);
         Assert.assertNotNull(correlationId, "Correlation ID should not be null.");
     }
 

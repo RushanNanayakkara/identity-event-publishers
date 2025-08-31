@@ -22,7 +22,6 @@ import org.apache.commons.lang.ArrayUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.identity.central.log.mgt.utils.LoggerUtils;
-import org.wso2.carbon.identity.event.publisher.api.model.EventContext;
 import org.wso2.carbon.identity.event.publisher.api.model.SecurityEventTokenPayload;
 import org.wso2.carbon.utils.DiagnosticLog;
 import org.wso2.identity.event.http.publisher.api.exception.HTTPAdapterClientException;
@@ -88,14 +87,15 @@ public class HTTPAdapterUtil {
     /**
      * Print diagnostic log for publisher operations.
      *
-     * @param eventContext Event context.
-     * @param eventPayload Event payload.
-     * @param endpoint     Endpoint URL.
-     * @param action       Action performed.
-     * @param status       Result status.
-     * @param message      Result message.
+     * @param eventProfileName Name of the event profile.
+     * @param eventProfileUri  URI of the event profile.
+     * @param events           Events published.
+     * @param endpoint         Endpoint URL.
+     * @param action           Action performed.
+     * @param status           Result status.
+     * @param message          Result message.
      */
-    public static void printPublisherDiagnosticLog(EventContext eventContext, SecurityEventTokenPayload eventPayload,
+    public static void printPublisherDiagnosticLog(String eventProfileName, String eventProfileUri, String events,
                                                    String endpoint, String action, DiagnosticLog.ResultStatus status,
                                                    String message) {
 
@@ -104,11 +104,10 @@ public class HTTPAdapterUtil {
                     HTTPAdapterConstants.LogConstants.HTTP_ADAPTER, action);
             diagnosticLogBuilder
                     .inputParam(HTTPAdapterConstants.LogConstants.InputKeys.ENDPOINT, endpoint)
-                    .inputParam(HTTPAdapterConstants.LogConstants.InputKeys.EVENT_URI, eventContext.getEventUri())
+                    .inputParam(HTTPAdapterConstants.LogConstants.InputKeys.EVENT_URI, eventProfileUri)
                     .inputParam(HTTPAdapterConstants.LogConstants.InputKeys.EVENT_PROFILE_NAME,
-                            eventContext.getEventProfileName())
-                    .inputParam(HTTPAdapterConstants.LogConstants.InputKeys.EVENTS,
-                            String.join(",", eventPayload.getEvents().keySet()))
+                            eventProfileName)
+                    .inputParam(HTTPAdapterConstants.LogConstants.InputKeys.EVENTS, events)
                     .resultMessage(message)
                     .resultStatus(status)
                     .logDetailLevel(DiagnosticLog.LogDetailLevel.APPLICATION);

@@ -18,8 +18,6 @@
 
 package org.wso2.identity.event.http.publisher.internal.component;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.http.HttpResponse;
@@ -192,30 +190,25 @@ public class ClientManager {
     /**
      * Create an HTTP POST request.
      *
-     * @param url     The URL for the HTTP POST request.
-     * @param payload The payload to include in the request body.
+     * @param url        The URL for the HTTP POST request.
+     * @param jsonString The JSON string to be sent as the request body.
+     * @param secret     The secret used for HMAC SHA-256 signature (can be null).
      * @return A configured HttpPost instance.
      * @throws HTTPAdapterException If an error occurs while creating the request.
      */
-    public HttpPost createHttpPost(String url, Object payload, String secret) throws HTTPAdapterException {
+    public HttpPost createHttpPost(String url, String jsonString, String secret)
+            throws HTTPAdapterException {
 
         HttpPost request = new HttpPost(url);
         request.setHeader(ACCEPT, ContentType.APPLICATION_JSON.getMimeType());
         request.setHeader(CONTENT_TYPE, ContentType.APPLICATION_JSON.getMimeType());
 
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
-        mapper.setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
-
-        String jsonString;
         try {
-            jsonString = mapper.writeValueAsString(payload);
             request.setEntity(new StringEntity(jsonString));
         } catch (IOException e) {
             throw HTTPAdapterUtil.handleClientException(ERROR_PUBLISHING_EVENT_INVALID_PAYLOAD);
         }
 
-        // Add HMAC signature header if secret is provided
         if (secret != null && !secret.isEmpty()) {
             try {
                 String signature = "sha256=" + hmacSha256Hex(secret, jsonString);
@@ -229,8 +222,8 @@ public class ClientManager {
     }
 
     // Utility method for HMAC SHA-256 hex encoding
-    private static String hmacSha256Hex(String secretKey, String data) throws NoSuchAlgorithmException,
-            InvalidKeyException {
+    private static String hmacSha256Hex(String secretKey, String data)
+            throws NoSuchAlgorithmException, InvalidKeyException {
 
         Mac mac = Mac.getInstance(HMAC_SHA256_ALGORITHM);
         SecretKeySpec key =
@@ -251,7 +244,6 @@ public class ClientManager {
      * @param httpPost The HTTP POST request to execute.
      * @return A CompletableFuture containing the HTTP response.
      */
-
     public CompletableFuture<HttpResponse> executeAsync(HttpPost httpPost) {
 
         CompletableFuture<HttpResponse> future = new CompletableFuture<>();
