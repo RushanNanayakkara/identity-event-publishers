@@ -43,7 +43,6 @@ import org.wso2.identity.event.websubhub.publisher.util.WebSubHubCorrelationLogU
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
-import java.util.Optional;
 
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils.CORRELATION_ID_MDC;
 import static org.wso2.identity.event.websubhub.publisher.constant.WebSubHubAdapterConstants.ErrorMessages.ERROR_BACKEND_ERROR_FROM_WEBSUB_HUB;
@@ -130,8 +129,7 @@ public class WebSubTopicManagerImpl implements TopicManager {
 
         int attempt = 0;
         while (true) {
-            HttpPost httpPost = clientManager.createHttpPost(topicMgtUrl, null,
-                    Optional.ofNullable(MDC.get(CORRELATION_ID_MDC)).orElse(""));
+            HttpPost httpPost = clientManager.createHttpPost(topicMgtUrl, null, MDC.get(CORRELATION_ID_MDC));
             httpPost.setHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.getMimeType());
 
             WebSubHubCorrelationLogUtils.triggerCorrelationLogForRequest(httpPost);

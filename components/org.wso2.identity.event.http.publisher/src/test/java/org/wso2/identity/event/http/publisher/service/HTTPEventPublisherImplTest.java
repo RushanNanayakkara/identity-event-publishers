@@ -19,6 +19,7 @@
 package org.wso2.identity.event.http.publisher.service;
 
 import org.apache.http.HttpResponse;
+import org.apache.http.client.methods.HttpPost;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.MockitoAnnotations;
@@ -132,7 +133,7 @@ public class HTTPEventPublisherImplTest {
             CompletableFuture<HttpResponse> future = CompletableFuture.completedFuture(mockHttpResponse);
             when(mockClientManager.executeAsync(any())).thenReturn(future);
             when(mockClientManager.createHttpPost(any(), any(), any())).thenReturn(
-                    mock(org.apache.http.client.methods.HttpPost.class));
+                    mock(HttpPost.class));
             when(mockClientManager.getAsyncCallbackExecutor()).thenReturn((Executor) Runnable::run);
 
             // Execute and verify no exception is thrown
