@@ -44,7 +44,6 @@ import org.wso2.identity.event.http.publisher.internal.util.HTTPAdapterUtil;
 import org.wso2.identity.event.http.publisher.internal.util.HTTPCorrelationLogUtils;
 
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils.CORRELATION_ID_MDC;
@@ -74,12 +73,7 @@ public class HTTPEventPublisherImpl implements EventPublisher {
     public void publish(SecurityEventTokenPayload eventPayload, EventContext eventContext)
             throws EventPublisherException {
 
-        try {
-            makeAsyncAPICall(eventPayload, eventContext);
-        } catch (WebhookMgtException e) {
-            throw new EventPublisherServerException(ERROR_ACTIVE_WEBHOOKS_RETRIEVAL.getMessage(),
-                    ERROR_ACTIVE_WEBHOOKS_RETRIEVAL.getDescription(), ERROR_ACTIVE_WEBHOOKS_RETRIEVAL.getCode(), e);
-        }
+        makeAsyncAPICall(eventPayload, eventContext);
     }
 
     @Override
@@ -97,11 +91,11 @@ public class HTTPEventPublisherImpl implements EventPublisher {
     }
 
     private void makeAsyncAPICall(SecurityEventTokenPayload eventPayload, EventContext eventContext)
-            throws WebhookMgtException {
+            throws EventPublisherServerException {
 
         // Freeze immutable per-publish values; reuse across retries.
         final String correlationId = HTTPAdapterUtil.getCorrelationID(eventPayload);
-        final String tenantDomain = eventContext.getTenantDomain() + "-" + UUID.randomUUID();
+        final String tenantDomain = eventContext.getTenantDomain();
 
         final String eventProfileName = eventContext.getEventProfileName();
         final String eventProfileUri = eventContext.getEventUri();
@@ -117,9 +111,15 @@ public class HTTPEventPublisherImpl implements EventPublisher {
             return;
         }
 
-        final List<Webhook> activeWebhooks = HTTPAdapterDataHolder.getInstance().getWebhookManagementService()
-                .getActiveWebhooks(eventContext.getEventProfileName(), eventContext.getEventProfileVersion(),
-                        eventContext.getEventUri(), eventContext.getTenantDomain());
+        final List<Webhook> activeWebhooks;
+        try {
+            activeWebhooks = HTTPAdapterDataHolder.getInstance().getWebhookManagementService()
+                    .getActiveWebhooks(eventContext.getEventProfileName(), eventContext.getEventProfileVersion(),
+                            eventContext.getEventUri(), eventContext.getTenantDomain());
+        } catch (WebhookMgtException e) {
+            throw new EventPublisherServerException(ERROR_ACTIVE_WEBHOOKS_RETRIEVAL.getMessage(),
+                    ERROR_ACTIVE_WEBHOOKS_RETRIEVAL.getDescription(), ERROR_ACTIVE_WEBHOOKS_RETRIEVAL.getCode(), e);
+        }
 
         for (Webhook webhook : activeWebhooks) {
             final String url = webhook.getEndpoint();
