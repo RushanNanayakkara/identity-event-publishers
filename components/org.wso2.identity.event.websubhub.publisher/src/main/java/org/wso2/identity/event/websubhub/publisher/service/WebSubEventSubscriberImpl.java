@@ -27,6 +27,7 @@ import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.message.BasicNameValuePair;
+import org.slf4j.MDC;
 import org.wso2.carbon.identity.subscription.management.api.model.Subscription;
 import org.wso2.carbon.identity.subscription.management.api.model.SubscriptionStatus;
 import org.wso2.carbon.identity.subscription.management.api.model.WebhookSubscriptionRequest;
@@ -43,7 +44,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
+import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils.CORRELATION_ID_MDC;
 import static org.wso2.identity.event.websubhub.publisher.constant.WebSubHubAdapterConstants.ErrorMessages.ERROR_SUBSCRIBING_TO_TOPIC;
 import static org.wso2.identity.event.websubhub.publisher.constant.WebSubHubAdapterConstants.Http.HUB_CALLBACK;
 import static org.wso2.identity.event.websubhub.publisher.constant.WebSubHubAdapterConstants.Http.HUB_MODE;
@@ -146,7 +149,8 @@ public class WebSubEventSubscriberImpl implements EventSubscriber {
 
         ClientManager clientManager = WebSubHubAdapterDataHolder.getInstance().getClientManager();
 
-        HttpPost httpPost = clientManager.createHttpPost(webSubHubBaseUrl, null);
+        HttpPost httpPost = clientManager.createHttpPost(webSubHubBaseUrl, null,
+                Optional.ofNullable(MDC.get(CORRELATION_ID_MDC)).orElse(""));
         httpPost.setHeader("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
 
         List<BasicNameValuePair> params = new ArrayList<>();
