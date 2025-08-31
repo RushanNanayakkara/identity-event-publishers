@@ -18,6 +18,10 @@
 
 package org.wso2.identity.event.websubhub.publisher.service;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.http.HttpResponse;
@@ -44,10 +48,10 @@ import static org.wso2.carbon.identity.application.authentication.framework.util
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils.TENANT_DOMAIN;
 import static org.wso2.carbon.identity.event.publisher.api.constant.ErrorMessage.ERROR_CODE_CONSTRUCTING_HUB_TOPIC;
 import static org.wso2.carbon.identity.event.publisher.api.constant.ErrorMessage.ERROR_CODE_TOPIC_EXISTS_CHECK;
-import static org.wso2.identity.event.websubhub.publisher.constant.WebSubHubAdapterConstants.Http.CORRELATION_ID_REQUEST_HEADER;
 import static org.wso2.identity.event.websubhub.publisher.constant.WebSubHubAdapterConstants.Http.PUBLISH;
 import static org.wso2.identity.event.websubhub.publisher.util.WebSubHubAdapterUtil.buildURL;
 import static org.wso2.identity.event.websubhub.publisher.util.WebSubHubAdapterUtil.constructHubTopic;
+import static org.wso2.identity.event.websubhub.publisher.util.WebSubHubAdapterUtil.getCorrelationID;
 import static org.wso2.identity.event.websubhub.publisher.util.WebSubHubAdapterUtil.getWebSubBaseURL;
 import static org.wso2.identity.event.websubhub.publisher.util.WebSubHubAdapterUtil.handleResponseCorrelationLog;
 import static org.wso2.identity.event.websubhub.publisher.util.WebSubHubAdapterUtil.handleServerException;
@@ -59,6 +63,9 @@ import static org.wso2.identity.event.websubhub.publisher.util.WebSubHubAdapterU
 public class WebSubEventPublisherImpl implements EventPublisher {
 
     private static final Log log = LogFactory.getLog(WebSubEventPublisherImpl.class);
+    private static final ObjectMapper MAPPER = new ObjectMapper()
+            .setSerializationInclusion(JsonInclude.Include.NON_NULL)
+            .setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
 
     @Override
     public String getAssociatedAdapter() {
@@ -71,14 +78,31 @@ public class WebSubEventPublisherImpl implements EventPublisher {
             throws EventPublisherException {
 
         try {
-            makeAsyncAPICall(eventPayload, eventContext,
-                    constructHubTopic(eventContext.getEventUri(), eventContext.getEventProfileName(),
-                            eventContext.getEventProfileVersion(), eventContext.getTenantDomain()),
-                    getWebSubBaseURL());
-            log.debug("Event publishing to WebSubHub invoked.");
+            // Build immutable per-publish values.
+            final String topic = constructHubTopic(
+                    eventContext.getEventUri(),
+                    eventContext.getEventProfileName(),
+                    eventContext.getEventProfileVersion(),
+                    eventContext.getTenantDomain());
+
+            final String url = buildURL(topic, getWebSubBaseURL(), PUBLISH);
+            final String bodyJson = MAPPER.writeValueAsString(eventPayload);
+
+            final String correlationId = getCorrelationID(eventPayload);
+            final String tenantDomain = eventContext.getTenantDomain();
+
+            final String eventProfileName = eventContext.getEventProfileName();
+            final String eventProfileUri = eventContext.getEventUri();
+            final String events = String.join(",", eventPayload.getEvents().keySet());
+
+            sendWithRetries(eventProfileName, eventProfileUri, events, bodyJson, correlationId, tenantDomain, url,
+                    WebSubHubAdapterDataHolder.getInstance().getClientManager().getMaxRetries());
         } catch (WebSubAdapterException e) {
             throw handleServerException(ERROR_CODE_CONSTRUCTING_HUB_TOPIC, e,
                     WebSubHubAdapterConstants.WEB_SUB_HUB_ADAPTER_NAME);
+        } catch (JsonProcessingException e) {
+            throw handleServerException(ERROR_CODE_CONSTRUCTING_HUB_TOPIC, e,
+                    "Error serializing event payload");
         }
     }
 
@@ -95,69 +119,68 @@ public class WebSubEventPublisherImpl implements EventPublisher {
         }
     }
 
-    private void makeAsyncAPICall(SecurityEventTokenPayload eventPayload, EventContext eventContext,
-                                  String topic, String webSubHubBaseUrl) throws WebSubAdapterException {
-
-        String url = buildURL(topic, webSubHubBaseUrl, PUBLISH);
-        printPublisherDiagnosticLog(eventContext, eventPayload,
-                WebSubHubAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT, DiagnosticLog.ResultStatus.SUCCESS,
-                "Publishing event data to WebSubHub.");
-
-        sendWithRetries(eventPayload, eventContext, url,
-                WebSubHubAdapterDataHolder.getInstance().getClientManager().getMaxRetries());
-    }
-
-    private void sendWithRetries(SecurityEventTokenPayload eventPayload, EventContext eventContext, String url,
-                                 int retriesLeft) {
+    private void sendWithRetries(String eventProfileName, String eventProfileUri, String events, String bodyJson,
+                                 String correlationId, String tenantDomain, String url, int retriesLeft) {
 
         ClientManager clientManager = WebSubHubAdapterDataHolder.getInstance().getClientManager();
+
         final HttpPost request;
         try {
-            request = clientManager.createHttpPost(url, eventPayload);
+            request = clientManager.createHttpPost(url, bodyJson, correlationId);
         } catch (WebSubAdapterException e) {
-            printPublisherDiagnosticLog(eventContext, eventPayload,
+            printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events,
                     WebSubHubAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT, DiagnosticLog.ResultStatus.FAILED,
                     "Failed to construct HTTP request for WebSubHub publish.");
-            log.debug("Error constructing HTTP request for WebSubHub publish. No retries will be attempted.", e);
+            log.warn("Failed to construct HTTP request for WebSubHub publish. No retries will be attempted.", e);
             return;
         }
 
+        printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events,
+                WebSubHubAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
+                DiagnosticLog.ResultStatus.SUCCESS,
+                "Publishing event data to WebSubHub.");
+        log.debug("Event publishing to WebSubHub invoked.");
+
         final long requestStartTime = System.currentTimeMillis();
-        final String correlationId = request.getFirstHeader(CORRELATION_ID_REQUEST_HEADER).getValue();
 
         CompletableFuture<HttpResponse> future = clientManager.executeAsync(request);
-
         future.whenCompleteAsync((response, throwable) -> {
             try {
                 PrivilegedCarbonContext.startTenantFlow();
-                PrivilegedCarbonContext.getThreadLocalCarbonContext()
-                        .setTenantDomain(eventContext.getTenantDomain());
-                MDC.put(CORRELATION_ID_MDC, correlationId);
-                MDC.put(TENANT_DOMAIN, eventContext.getTenantDomain());
+                PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(tenantDomain);
+                if (StringUtils.isNotBlank(correlationId)) {
+                    MDC.put(CORRELATION_ID_MDC, correlationId);
+                }
+                MDC.put(TENANT_DOMAIN, tenantDomain);
+
                 if (throwable == null) {
                     int status = response.getStatusLine().getStatusCode();
                     if (status >= 200 && status < 300) {
-                        handleAsyncResponse(response, eventPayload, request, requestStartTime, eventContext);
+                        handleAsyncResponse(eventProfileName, eventProfileUri, events, response, request,
+                                requestStartTime);
                     } else {
                         if (retriesLeft > 0) {
-                            printPublisherDiagnosticLog(eventContext, eventPayload,
+                            printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events,
                                     WebSubHubAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
                                     DiagnosticLog.ResultStatus.FAILED,
                                     "Publish attempt failed with status code: " + status +
                                             ". Retrying… (" + retriesLeft + " attempts left)");
-                            sendWithRetries(eventPayload, eventContext, url, retriesLeft - 1);
+                            log.debug("Publish attempt failed with status code: " + status +
+                                    ". Retrying… (" + retriesLeft + " attempts left)");
+                            sendWithRetries(eventProfileName, eventProfileUri, events, bodyJson, correlationId,
+                                    tenantDomain, url, retriesLeft - 1);
                         } else {
                             handleResponseCorrelationLog(request, requestStartTime,
                                     WebSubHubCorrelationLogUtils.RequestStatus.FAILED.getStatus(),
                                     String.valueOf(status),
                                     response.getStatusLine().getReasonPhrase());
-                            printPublisherDiagnosticLog(eventContext, eventPayload,
+                            printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events,
                                     WebSubHubAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
                                     DiagnosticLog.ResultStatus.FAILED,
                                     "Failed to publish event data to WebSubHub. Status code: " + status +
                                             ". Maximum retries reached.");
-                            log.error(
-                                    "Failed to publish event data to websubhub: " + url + ". Maximum retries reached.");
+                            log.error("Failed to publish event data to WebSubHub: " + url +
+                                    ". Maximum retries reached.");
                             try {
                                 if (response.getEntity() != null) {
                                     String body = EntityUtils.toString(response.getEntity());
@@ -167,7 +190,7 @@ public class WebSubEventPublisherImpl implements EventPublisher {
                                             ". Response entity is null.");
                                 }
                             } catch (IOException e) {
-                                printPublisherDiagnosticLog(eventContext, eventPayload,
+                                printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events,
                                         WebSubHubAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
                                         DiagnosticLog.ResultStatus.FAILED,
                                         "Error while reading WebSubHub event publisher");
@@ -177,49 +200,53 @@ public class WebSubEventPublisherImpl implements EventPublisher {
                     }
                 } else {
                     if (retriesLeft > 0) {
-                        printPublisherDiagnosticLog(eventContext, eventPayload,
+                        printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events,
                                 WebSubHubAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
                                 DiagnosticLog.ResultStatus.FAILED,
                                 "Publish attempt failed due to exception. Retrying… (" +
                                         retriesLeft + " attempts left)");
-                        sendWithRetries(eventPayload, eventContext, url, retriesLeft - 1);
+                        log.debug("Publish attempt failed due to exception. Retrying… (" +
+                                retriesLeft + " attempts left)", throwable);
+                        sendWithRetries(eventProfileName, eventProfileUri, events, bodyJson, correlationId,
+                                tenantDomain, url, retriesLeft - 1);
                     } else {
                         handleResponseCorrelationLog(request, requestStartTime,
                                 WebSubHubCorrelationLogUtils.RequestStatus.FAILED.getStatus(),
                                 throwable.getMessage());
-                        printPublisherDiagnosticLog(eventContext, eventPayload,
+                        printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events,
                                 WebSubHubAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
                                 DiagnosticLog.ResultStatus.FAILED,
                                 "Failed to publish event data to WebSubHub. Maximum retries reached.");
-                        log.error("Failed to publish event data to websubhub: " + url + ". Maximum retries reached.");
+                        log.error("Failed to publish event data to WebSubHub: " + url +
+                                ". Maximum retries reached.");
                     }
                 }
             } finally {
-                MDC.remove(CORRELATION_ID_MDC);
+                if (StringUtils.isNotBlank(correlationId)) {
+                    MDC.remove(CORRELATION_ID_MDC);
+                }
                 MDC.remove(TENANT_DOMAIN);
                 PrivilegedCarbonContext.endTenantFlow();
             }
         }, clientManager.getAsyncCallbackExecutor());
     }
 
-    private static void handleAsyncResponse(HttpResponse response, SecurityEventTokenPayload eventPayload,
-                                            HttpPost request,
-                                            long requestStartTime,
-                                            EventContext eventContext) {
+    private static void handleAsyncResponse(String eventProfileName, String eventProfileUri, String events,
+                                            HttpResponse response, HttpPost request, long requestStartTime) {
 
         int responseCode = response.getStatusLine().getStatusCode();
         String responsePhrase = response.getStatusLine().getReasonPhrase();
+
         log.debug("WebSubHub request completed. Response code: " + responseCode);
 
         handleResponseCorrelationLog(request, requestStartTime,
                 WebSubHubCorrelationLogUtils.RequestStatus.COMPLETED.getStatus(),
                 String.valueOf(responseCode), responsePhrase);
 
-        printPublisherDiagnosticLog(eventContext, eventPayload,
+        printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events,
                 WebSubHubAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
                 DiagnosticLog.ResultStatus.SUCCESS,
                 "Event data published to WebSubHub. Status code: " + responseCode);
-
         try {
             if (response.getEntity() != null) {
                 log.debug("Response data: " + EntityUtils.toString(response.getEntity()));
@@ -227,7 +254,7 @@ public class WebSubEventPublisherImpl implements EventPublisher {
                 log.debug("Response entity is null.");
             }
         } catch (IOException e) {
-            printPublisherDiagnosticLog(eventContext, eventPayload,
+            printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events,
                     WebSubHubAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
                     DiagnosticLog.ResultStatus.FAILED,
                     "Error while reading WebSubHub event publisher response.");

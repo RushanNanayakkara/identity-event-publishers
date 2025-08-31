@@ -103,7 +103,7 @@ public class WebSubEventSubscriberImplTest {
                 .build();
 
         HttpPost mockHttpPost = mock(HttpPost.class);
-        when(mockClientManager.createHttpPost(any(), any())).thenReturn(mockHttpPost);
+        when(mockClientManager.createHttpPost(any(), any(), any())).thenReturn(mockHttpPost);
         when(mockClientManager.executeSubscriberRequest(any())).thenReturn(mockHttpResponse);
 
         StatusLine mockStatusLine = mock(StatusLine.class);
@@ -130,7 +130,7 @@ public class WebSubEventSubscriberImplTest {
                 .build();
 
         HttpPost mockHttpPost = mock(HttpPost.class);
-        when(mockClientManager.createHttpPost(any(), any())).thenReturn(mockHttpPost);
+        when(mockClientManager.createHttpPost(any(), any(), any())).thenReturn(mockHttpPost);
         when(mockClientManager.executeSubscriberRequest(any())).thenReturn(mockHttpResponse);
 
         StatusLine mockStatusLine = mock(StatusLine.class);

@@ -28,6 +28,7 @@ import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.ContentType;
 import org.apache.http.util.EntityUtils;
+import org.slf4j.MDC;
 import org.wso2.carbon.identity.topic.management.api.exception.TopicManagementException;
 import org.wso2.carbon.identity.topic.management.api.service.TopicManager;
 import org.wso2.carbon.utils.DiagnosticLog;
@@ -43,6 +44,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
+import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils.CORRELATION_ID_MDC;
 import static org.wso2.identity.event.websubhub.publisher.constant.WebSubHubAdapterConstants.ErrorMessages.ERROR_BACKEND_ERROR_FROM_WEBSUB_HUB;
 import static org.wso2.identity.event.websubhub.publisher.constant.WebSubHubAdapterConstants.ErrorMessages.ERROR_DEREGISTERING_HUB_TOPIC;
 import static org.wso2.identity.event.websubhub.publisher.constant.WebSubHubAdapterConstants.ErrorMessages.ERROR_EMPTY_RESPONSE_FROM_WEBSUB_HUB;
@@ -127,7 +129,7 @@ public class WebSubTopicManagerImpl implements TopicManager {
 
         int attempt = 0;
         while (true) {
-            HttpPost httpPost = clientManager.createHttpPost(topicMgtUrl, null);
+            HttpPost httpPost = clientManager.createHttpPost(topicMgtUrl, null, MDC.get(CORRELATION_ID_MDC));
             httpPost.setHeader(HttpHeaders.CONTENT_TYPE, ContentType.APPLICATION_JSON.getMimeType());
 
             WebSubHubCorrelationLogUtils.triggerCorrelationLogForRequest(httpPost);

@@ -19,6 +19,7 @@
 package org.wso2.identity.event.http.publisher.service;
 
 import org.apache.http.HttpResponse;
+import org.apache.http.client.methods.HttpPost;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.MockitoAnnotations;
@@ -27,6 +28,7 @@ import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 import org.wso2.carbon.identity.central.log.mgt.utils.LoggerUtils;
 import org.wso2.carbon.identity.event.publisher.api.model.EventContext;
+import org.wso2.carbon.identity.event.publisher.api.model.EventPayload;
 import org.wso2.carbon.identity.event.publisher.api.model.SecurityEventTokenPayload;
 import org.wso2.carbon.identity.webhook.management.api.model.Webhook;
 import org.wso2.identity.event.http.publisher.internal.component.ClientManager;
@@ -34,6 +36,7 @@ import org.wso2.identity.event.http.publisher.internal.component.HTTPAdapterData
 import org.wso2.identity.event.http.publisher.internal.service.impl.HTTPEventPublisherImpl;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -122,13 +125,15 @@ public class HTTPEventPublisherImplTest {
                     .jti("jti-token")
                     .iat(System.currentTimeMillis())
                     .aud("audience")
+                    .events(Collections.singletonMap("event1", new EventPayload() {
+                    }))
                     .build();
 
             // Mock ClientManager behavior to simulate success
             CompletableFuture<HttpResponse> future = CompletableFuture.completedFuture(mockHttpResponse);
             when(mockClientManager.executeAsync(any())).thenReturn(future);
             when(mockClientManager.createHttpPost(any(), any(), any())).thenReturn(
-                    mock(org.apache.http.client.methods.HttpPost.class));
+                    mock(HttpPost.class));
             when(mockClientManager.getAsyncCallbackExecutor()).thenReturn((Executor) Runnable::run);
 
             // Execute and verify no exception is thrown

@@ -66,24 +66,10 @@ public class ClientManagerTest {
     public void testCreateHttpPost() throws WebSubAdapterException {
 
         TestPayload payload = new TestPayload("mockFieldValue");
-        HttpPost post = clientManager.createHttpPost("http://mock-url.com", payload);
+        HttpPost post =
+                clientManager.createHttpPost("http://mock-url.com", String.valueOf(payload), "test-correlation-id");
         Assert.assertNotNull(post);
         Assert.assertEquals(post.getMethod(), "POST");
-    }
-
-    @Test(expectedExceptions = WebSubAdapterException.class)
-    public void testCreateHttpPostException() throws WebSubAdapterException {
-
-        Object payload = new Object() {
-            @Override
-            public String toString() {
-
-                throw new RuntimeException("Simulated IOException trigger");
-            }
-        };
-
-        ClientManager clientManager = new ClientManager();
-        clientManager.createHttpPost("http://mock-url.com", payload);
     }
 
     @AfterClass
