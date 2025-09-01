@@ -266,7 +266,9 @@ public class WebSubEventPublisherImpl implements EventPublisher {
                     "Error while reading WebSubHub event publisher response.");
             log.debug("Error while reading WebSubHub event publisher response.", e);
         } finally {
-            EntityUtils.consumeQuietly(response.getEntity());
+            if (response.getEntity() != null) {
+                EntityUtils.consumeQuietly(response.getEntity());
+            }
         }
     }
 }
