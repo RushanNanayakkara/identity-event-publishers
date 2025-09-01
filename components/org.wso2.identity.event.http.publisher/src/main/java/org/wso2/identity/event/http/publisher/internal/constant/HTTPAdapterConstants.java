@@ -82,8 +82,8 @@ public class HTTPAdapterConstants {
 
             public static final String ENDPOINT = "endpoint";
             public static final String EVENTS = "events";
-            public static final String EVENT_URI = "event uri";
-            public static final String EVENT_PROFILE_NAME = "event profile name";
+            public static final String EVENT_URI = "eventUri";
+            public static final String EVENT_PROFILE_NAME = "eventProfileName";
         }
     }
 
