@@ -50,6 +50,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import static java.util.Collections.emptyMap;
+import static org.wso2.carbon.CarbonConstants.LogEventConstants.TENANT_ID;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils.CORRELATION_ID_MDC;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils.TENANT_DOMAIN;
 import static org.wso2.identity.event.http.publisher.internal.constant.ErrorMessage.ERROR_ACTIVE_WEBHOOKS_RETRIEVAL;
@@ -177,6 +178,7 @@ public class HTTPEventPublisherImpl implements EventPublisher {
                     MDC.put(CORRELATION_ID_MDC, correlationId);
                 }
                 MDC.put(TENANT_DOMAIN, tenantDomain);
+                MDC.put(TENANT_ID, String.valueOf(tenantId));
                 PrivilegedCarbonContext.startTenantFlow();
                 PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantId(tenantId);
                 PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(tenantDomain);
@@ -244,6 +246,7 @@ public class HTTPEventPublisherImpl implements EventPublisher {
                     MDC.remove(CORRELATION_ID_MDC);
                 }
                 MDC.remove(TENANT_DOMAIN);
+                MDC.remove(TENANT_ID);
                 PrivilegedCarbonContext.endTenantFlow();
                 MDC.clear();
             }
