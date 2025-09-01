@@ -116,7 +116,9 @@ public class ClientManager {
 
             // Custom handler that logs when the queue is full and discards the task.
             RejectedExecutionHandler handler = (r, executor) -> {
-                LOG.warn("Async callback queue is full; discarding task of publishing events.");
+                LOG.error(
+                        "Async callback queue is full; discarding task of publishing events. " +
+                                "Please attend immediately.");
                 // the task is silently dropped
             };
 

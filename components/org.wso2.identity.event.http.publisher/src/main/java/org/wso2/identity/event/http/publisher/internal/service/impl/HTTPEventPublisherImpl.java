@@ -26,6 +26,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpPost;
+import org.apache.http.util.EntityUtils;
 import org.slf4j.MDC;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
 import org.wso2.carbon.identity.event.publisher.api.exception.EventPublisherException;
@@ -161,6 +162,7 @@ public class HTTPEventPublisherImpl implements EventPublisher {
 
         future.whenCompleteAsync((response, throwable) -> {
             try {
+                MDC.clear();
                 PrivilegedCarbonContext.startTenantFlow();
                 PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(tenantDomain);
 
@@ -225,11 +227,15 @@ public class HTTPEventPublisherImpl implements EventPublisher {
                     }
                 }
             } finally {
+                if (response.getEntity() != null) {
+                    EntityUtils.consumeQuietly(response.getEntity());
+                }
                 if (StringUtils.isNotEmpty(correlationId)) {
                     MDC.remove(CORRELATION_ID_MDC);
                 }
                 MDC.remove(TENANT_DOMAIN);
                 PrivilegedCarbonContext.endTenantFlow();
+                MDC.clear();
             }
         }, clientManager.getAsyncCallbackExecutor());
     }
