@@ -29,6 +29,7 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.util.EntityUtils;
 import org.slf4j.MDC;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
+import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.event.publisher.api.exception.EventPublisherException;
 import org.wso2.carbon.identity.event.publisher.api.model.EventContext;
 import org.wso2.carbon.identity.event.publisher.api.model.SecurityEventTokenPayload;
@@ -92,6 +93,7 @@ public class WebSubEventPublisherImpl implements EventPublisher {
 
             final String correlationId = getCorrelationID(eventPayload);
             final String tenantDomain = eventContext.getTenantDomain();
+            final int tenantId = IdentityTenantUtil.getTenantId(eventContext.getTenantDomain());
 
             final String eventProfileName = eventContext.getEventProfileName();
             final String eventProfileUri = eventContext.getEventUri();
@@ -101,7 +103,7 @@ public class WebSubEventPublisherImpl implements EventPublisher {
                     MDC.getCopyOfContextMap() != null ? MDC.getCopyOfContextMap() : emptyMap();
 
             sendWithRetries(eventProfileName, eventProfileUri, events, bodyJson, copiedMDCSnapshot, correlationId,
-                    tenantDomain, url,
+                    tenantDomain, tenantId, url,
                     WebSubHubAdapterDataHolder.getInstance().getClientManager().getMaxRetries());
         } catch (WebSubAdapterException e) {
             throw handleServerException(ERROR_CODE_CONSTRUCTING_HUB_TOPIC, e,
@@ -126,8 +128,8 @@ public class WebSubEventPublisherImpl implements EventPublisher {
     }
 
     private void sendWithRetries(String eventProfileName, String eventProfileUri, String events, String bodyJson,
-                                 Map<String, String> mdcSnapshot, String correlationId, String tenantDomain, String url,
-                                 int retriesLeft) {
+                                 Map<String, String> mdcSnapshot, String correlationId, String tenantDomain,
+                                 int tenantId, String url, int retriesLeft) {
 
         ClientManager clientManager = WebSubHubAdapterDataHolder.getInstance().getClientManager();
 
@@ -162,7 +164,8 @@ public class WebSubEventPublisherImpl implements EventPublisher {
                 }
                 MDC.put(TENANT_DOMAIN, tenantDomain);
                 PrivilegedCarbonContext.startTenantFlow();
-                PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(tenantDomain, true);
+                PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantId(tenantId);
+                PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(tenantDomain);
 
                 if (throwable == null) {
                     int status = response.getStatusLine().getStatusCode();
@@ -179,7 +182,7 @@ public class WebSubEventPublisherImpl implements EventPublisher {
                             log.debug("Publish attempt failed with status code: " + status +
                                     ". Retrying… (" + retriesLeft + " attempts left)");
                             sendWithRetries(eventProfileName, eventProfileUri, events, bodyJson, mdcSnapshot,
-                                    correlationId, tenantDomain, url, retriesLeft - 1);
+                                    correlationId, tenantDomain, tenantId, url, retriesLeft - 1);
                         } else {
                             handleResponseCorrelationLog(request, requestStartTime,
                                     WebSubHubCorrelationLogUtils.RequestStatus.FAILED.getStatus(),
@@ -223,7 +226,7 @@ public class WebSubEventPublisherImpl implements EventPublisher {
                         log.debug("Publish attempt failed due to exception. Retrying… (" +
                                 retriesLeft + " attempts left)", throwable);
                         sendWithRetries(eventProfileName, eventProfileUri, events, bodyJson, mdcSnapshot, correlationId,
-                                tenantDomain, url, retriesLeft - 1);
+                                tenantDomain, tenantId, url, retriesLeft - 1);
                     } else {
                         handleResponseCorrelationLog(request, requestStartTime,
                                 WebSubHubCorrelationLogUtils.RequestStatus.FAILED.getStatus(),

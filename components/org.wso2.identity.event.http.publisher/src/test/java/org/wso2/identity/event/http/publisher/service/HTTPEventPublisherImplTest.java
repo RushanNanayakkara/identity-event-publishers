@@ -27,6 +27,7 @@ import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 import org.wso2.carbon.identity.central.log.mgt.utils.LoggerUtils;
+import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.event.publisher.api.model.EventContext;
 import org.wso2.carbon.identity.event.publisher.api.model.EventPayload;
 import org.wso2.carbon.identity.event.publisher.api.model.SecurityEventTokenPayload;
@@ -61,12 +62,14 @@ public class HTTPEventPublisherImplTest {
     private HttpResponse mockHttpResponse;
 
     private MockedStatic<HTTPAdapterDataHolder> mockedStaticDataHolder;
+    private static MockedStatic<IdentityTenantUtil> mockedStaticIdentityTenantUtil;
 
     @BeforeClass
     public void setUp() throws Exception {
 
         mocks = MockitoAnnotations.openMocks(this);
         adapterService = spy(new HTTPEventPublisherImpl());
+        mockIdentityTenantUtil();
 
         mockedStaticDataHolder = mockStatic(HTTPAdapterDataHolder.class);
         HTTPAdapterDataHolder mockDataHolder = mock(HTTPAdapterDataHolder.class);
@@ -143,5 +146,18 @@ public class HTTPEventPublisherImplTest {
             verify(mockClientManager, times(2)).executeAsync(any());
             verify(mockClientManager, times(2)).createHttpPost(any(), any(), any());
         }
+    }
+
+    /**
+     * Mocks the IdentityTenantUtil.
+     */
+    private static void mockIdentityTenantUtil() {
+
+        if (mockedStaticIdentityTenantUtil != null && !mockedStaticIdentityTenantUtil.isClosed()) {
+            mockedStaticIdentityTenantUtil.close();
+        }
+        mockedStaticIdentityTenantUtil = mockStatic(IdentityTenantUtil.class);
+        when(IdentityTenantUtil.isTenantedSessionsEnabled()).thenReturn(false);
+        when(IdentityTenantUtil.getTenantId("test-tenant")).thenReturn(1);
     }
 }
