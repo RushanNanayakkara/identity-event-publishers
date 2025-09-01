@@ -45,8 +45,10 @@ import org.wso2.identity.event.http.publisher.internal.util.HTTPAdapterUtil;
 import org.wso2.identity.event.http.publisher.internal.util.HTTPCorrelationLogUtils;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
+import static java.util.Collections.emptyMap;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils.CORRELATION_ID_MDC;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils.TENANT_DOMAIN;
 import static org.wso2.identity.event.http.publisher.internal.constant.ErrorMessage.ERROR_ACTIVE_WEBHOOKS_RETRIEVAL;
@@ -102,6 +104,9 @@ public class HTTPEventPublisherImpl implements EventPublisher {
         final String eventProfileUri = eventContext.getEventUri();
         final String events = String.join(",", eventPayload.getEvents().keySet());
 
+        final Map<String, String> copiedMDCSnapshot =
+                MDC.getCopyOfContextMap() != null ? MDC.getCopyOfContextMap() : emptyMap();
+
         final String bodyJson;
         try {
             bodyJson = MAPPER.writeValueAsString(eventPayload);
@@ -127,7 +132,7 @@ public class HTTPEventPublisherImpl implements EventPublisher {
             final String secret = webhook.getSecret();
 
             sendWithRetries(eventProfileName, eventProfileUri, events,
-                    bodyJson, correlationId, tenantDomain, url, secret,
+                    bodyJson, copiedMDCSnapshot, correlationId, tenantDomain, url, secret,
                     HTTPAdapterDataHolder.getInstance().getClientManager().getMaxRetries());
         }
     }
@@ -136,7 +141,8 @@ public class HTTPEventPublisherImpl implements EventPublisher {
      * Retries always reuse the frozen snapshots; no shared mutable state is read here.
      */
     private void sendWithRetries(String eventProfileName, String eventProfileUri, String events, String bodyJson,
-                                 String correlationId, String tenantDomain, String url, String secret,
+                                 Map<String, String> mdcSnapshot, String correlationId, String tenantDomain, String url,
+                                 String secret,
                                  int retriesLeft) {
 
         ClientManager clientManager = HTTPAdapterDataHolder.getInstance().getClientManager();
@@ -163,13 +169,15 @@ public class HTTPEventPublisherImpl implements EventPublisher {
         future.whenCompleteAsync((response, throwable) -> {
             try {
                 MDC.clear();
-                PrivilegedCarbonContext.startTenantFlow();
-                PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(tenantDomain, true);
-
-                if (StringUtils.isNotEmpty(correlationId)) {
+                if (mdcSnapshot != null && !mdcSnapshot.isEmpty()) {
+                    MDC.setContextMap(mdcSnapshot);
+                }
+                if (StringUtils.isNotBlank(correlationId)) {
                     MDC.put(CORRELATION_ID_MDC, correlationId);
                 }
                 MDC.put(TENANT_DOMAIN, tenantDomain);
+                PrivilegedCarbonContext.startTenantFlow();
+                PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(tenantDomain, true);
 
                 if (throwable == null) {
                     int status = response.getStatusLine().getStatusCode();
@@ -190,8 +198,8 @@ public class HTTPEventPublisherImpl implements EventPublisher {
                                     "Publish attempt failed with status code: " + status +
                                             ". Retrying… (" + retriesLeft + " attempts left)");
                             // Retry with the SAME snapshots
-                            sendWithRetries(eventProfileName, eventProfileUri, events,
-                                    bodyJson, correlationId, tenantDomain, url, secret, retriesLeft - 1);
+                            sendWithRetries(eventProfileName, eventProfileUri, events, bodyJson, mdcSnapshot,
+                                    correlationId, tenantDomain, url, secret, retriesLeft - 1);
                         } else {
                             handleResponseCorrelationLog(request, requestStartTime,
                                     HTTPCorrelationLogUtils.RequestStatus.FAILED.getStatus(),
@@ -212,8 +220,8 @@ public class HTTPEventPublisherImpl implements EventPublisher {
                                 "Publish attempt failed due to exception. Retrying… (" +
                                         retriesLeft + " attempts left)");
                         // Retry with the SAME snapshots
-                        sendWithRetries(eventProfileName, eventProfileUri, events,
-                                bodyJson, correlationId, tenantDomain, url, secret, retriesLeft - 1);
+                        sendWithRetries(eventProfileName, eventProfileUri, events, bodyJson, mdcSnapshot, correlationId,
+                                tenantDomain, url, secret, retriesLeft - 1);
                     } else {
                         handleResponseCorrelationLog(request, requestStartTime,
                                 HTTPCorrelationLogUtils.RequestStatus.FAILED.getStatus(),
