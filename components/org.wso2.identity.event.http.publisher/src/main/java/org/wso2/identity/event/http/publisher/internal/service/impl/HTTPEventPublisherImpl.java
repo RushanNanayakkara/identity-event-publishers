@@ -164,7 +164,7 @@ public class HTTPEventPublisherImpl implements EventPublisher {
             try {
                 MDC.clear();
                 PrivilegedCarbonContext.startTenantFlow();
-                PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(tenantDomain);
+                PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(tenantDomain, true);
 
                 if (StringUtils.isNotEmpty(correlationId)) {
                     MDC.put(CORRELATION_ID_MDC, correlationId);

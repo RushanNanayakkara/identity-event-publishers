@@ -148,7 +148,7 @@ public class WebSubEventPublisherImpl implements EventPublisher {
             try {
                 MDC.clear();
                 PrivilegedCarbonContext.startTenantFlow();
-                PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(tenantDomain);
+                PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(tenantDomain, true);
                 if (StringUtils.isNotBlank(correlationId)) {
                     MDC.put(CORRELATION_ID_MDC, correlationId);
                 }
