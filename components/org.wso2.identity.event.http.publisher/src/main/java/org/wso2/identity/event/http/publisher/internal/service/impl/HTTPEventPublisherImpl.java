@@ -29,6 +29,7 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.util.EntityUtils;
 import org.slf4j.MDC;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
+import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.event.publisher.api.exception.EventPublisherException;
 import org.wso2.carbon.identity.event.publisher.api.exception.EventPublisherServerException;
 import org.wso2.carbon.identity.event.publisher.api.model.EventContext;
@@ -99,6 +100,7 @@ public class HTTPEventPublisherImpl implements EventPublisher {
         // Freeze immutable per-publish values; reuse across retries.
         final String correlationId = HTTPAdapterUtil.getCorrelationID(eventPayload);
         final String tenantDomain = eventContext.getTenantDomain();
+        final int tenantId = IdentityTenantUtil.getTenantId(eventContext.getTenantDomain());
 
         final String eventProfileName = eventContext.getEventProfileName();
         final String eventProfileUri = eventContext.getEventUri();
@@ -132,7 +134,7 @@ public class HTTPEventPublisherImpl implements EventPublisher {
             final String secret = webhook.getSecret();
 
             sendWithRetries(eventProfileName, eventProfileUri, events,
-                    bodyJson, copiedMDCSnapshot, correlationId, tenantDomain, url, secret,
+                    bodyJson, copiedMDCSnapshot, correlationId, tenantDomain, tenantId, url, secret,
                     HTTPAdapterDataHolder.getInstance().getClientManager().getMaxRetries());
         }
     }
@@ -141,9 +143,8 @@ public class HTTPEventPublisherImpl implements EventPublisher {
      * Retries always reuse the frozen snapshots; no shared mutable state is read here.
      */
     private void sendWithRetries(String eventProfileName, String eventProfileUri, String events, String bodyJson,
-                                 Map<String, String> mdcSnapshot, String correlationId, String tenantDomain, String url,
-                                 String secret,
-                                 int retriesLeft) {
+                                 Map<String, String> mdcSnapshot, String correlationId, String tenantDomain,
+                                 int tenantId, String url, String secret, int retriesLeft) {
 
         ClientManager clientManager = HTTPAdapterDataHolder.getInstance().getClientManager();
 
@@ -177,7 +178,8 @@ public class HTTPEventPublisherImpl implements EventPublisher {
                 }
                 MDC.put(TENANT_DOMAIN, tenantDomain);
                 PrivilegedCarbonContext.startTenantFlow();
-                PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(tenantDomain, true);
+                PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantId(tenantId);
+                PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(tenantDomain);
 
                 if (throwable == null) {
                     int status = response.getStatusLine().getStatusCode();
@@ -199,7 +201,7 @@ public class HTTPEventPublisherImpl implements EventPublisher {
                                             ". Retrying… (" + retriesLeft + " attempts left)");
                             // Retry with the SAME snapshots
                             sendWithRetries(eventProfileName, eventProfileUri, events, bodyJson, mdcSnapshot,
-                                    correlationId, tenantDomain, url, secret, retriesLeft - 1);
+                                    correlationId, tenantDomain, tenantId, url, secret, retriesLeft - 1);
                         } else {
                             handleResponseCorrelationLog(request, requestStartTime,
                                     HTTPCorrelationLogUtils.RequestStatus.FAILED.getStatus(),
@@ -221,7 +223,7 @@ public class HTTPEventPublisherImpl implements EventPublisher {
                                         retriesLeft + " attempts left)");
                         // Retry with the SAME snapshots
                         sendWithRetries(eventProfileName, eventProfileUri, events, bodyJson, mdcSnapshot, correlationId,
-                                tenantDomain, url, secret, retriesLeft - 1);
+                                tenantDomain, tenantId, url, secret, retriesLeft - 1);
                     } else {
                         handleResponseCorrelationLog(request, requestStartTime,
                                 HTTPCorrelationLogUtils.RequestStatus.FAILED.getStatus(),
