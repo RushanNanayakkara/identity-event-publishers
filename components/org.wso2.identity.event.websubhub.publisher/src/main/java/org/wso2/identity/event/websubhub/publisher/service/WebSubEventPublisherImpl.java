@@ -42,8 +42,10 @@ import org.wso2.identity.event.websubhub.publisher.internal.WebSubHubAdapterData
 import org.wso2.identity.event.websubhub.publisher.util.WebSubHubCorrelationLogUtils;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
+import static java.util.Collections.emptyMap;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils.CORRELATION_ID_MDC;
 import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils.TENANT_DOMAIN;
 import static org.wso2.carbon.identity.event.publisher.api.constant.ErrorMessage.ERROR_CODE_CONSTRUCTING_HUB_TOPIC;
@@ -95,7 +97,11 @@ public class WebSubEventPublisherImpl implements EventPublisher {
             final String eventProfileUri = eventContext.getEventUri();
             final String events = String.join(",", eventPayload.getEvents().keySet());
 
-            sendWithRetries(eventProfileName, eventProfileUri, events, bodyJson, correlationId, tenantDomain, url,
+            final Map<String, String> copiedMDCSnapshot =
+                    MDC.getCopyOfContextMap() != null ? MDC.getCopyOfContextMap() : emptyMap();
+
+            sendWithRetries(eventProfileName, eventProfileUri, events, bodyJson, copiedMDCSnapshot, correlationId,
+                    tenantDomain, url,
                     WebSubHubAdapterDataHolder.getInstance().getClientManager().getMaxRetries());
         } catch (WebSubAdapterException e) {
             throw handleServerException(ERROR_CODE_CONSTRUCTING_HUB_TOPIC, e,
@@ -120,7 +126,8 @@ public class WebSubEventPublisherImpl implements EventPublisher {
     }
 
     private void sendWithRetries(String eventProfileName, String eventProfileUri, String events, String bodyJson,
-                                 String correlationId, String tenantDomain, String url, int retriesLeft) {
+                                 Map<String, String> mdcSnapshot, String correlationId, String tenantDomain, String url,
+                                 int retriesLeft) {
 
         ClientManager clientManager = WebSubHubAdapterDataHolder.getInstance().getClientManager();
 
@@ -147,12 +154,15 @@ public class WebSubEventPublisherImpl implements EventPublisher {
         future.whenCompleteAsync((response, throwable) -> {
             try {
                 MDC.clear();
-                PrivilegedCarbonContext.startTenantFlow();
-                PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(tenantDomain, true);
+                if (mdcSnapshot != null && !mdcSnapshot.isEmpty()) {
+                    MDC.setContextMap(mdcSnapshot);
+                }
                 if (StringUtils.isNotBlank(correlationId)) {
                     MDC.put(CORRELATION_ID_MDC, correlationId);
                 }
                 MDC.put(TENANT_DOMAIN, tenantDomain);
+                PrivilegedCarbonContext.startTenantFlow();
+                PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(tenantDomain, true);
 
                 if (throwable == null) {
                     int status = response.getStatusLine().getStatusCode();
@@ -168,8 +178,8 @@ public class WebSubEventPublisherImpl implements EventPublisher {
                                             ". Retrying… (" + retriesLeft + " attempts left)");
                             log.debug("Publish attempt failed with status code: " + status +
                                     ". Retrying… (" + retriesLeft + " attempts left)");
-                            sendWithRetries(eventProfileName, eventProfileUri, events, bodyJson, correlationId,
-                                    tenantDomain, url, retriesLeft - 1);
+                            sendWithRetries(eventProfileName, eventProfileUri, events, bodyJson, mdcSnapshot,
+                                    correlationId, tenantDomain, url, retriesLeft - 1);
                         } else {
                             handleResponseCorrelationLog(request, requestStartTime,
                                     WebSubHubCorrelationLogUtils.RequestStatus.FAILED.getStatus(),
@@ -212,7 +222,7 @@ public class WebSubEventPublisherImpl implements EventPublisher {
                                         retriesLeft + " attempts left)");
                         log.debug("Publish attempt failed due to exception. Retrying… (" +
                                 retriesLeft + " attempts left)", throwable);
-                        sendWithRetries(eventProfileName, eventProfileUri, events, bodyJson, correlationId,
+                        sendWithRetries(eventProfileName, eventProfileUri, events, bodyJson, mdcSnapshot, correlationId,
                                 tenantDomain, url, retriesLeft - 1);
                     } else {
                         handleResponseCorrelationLog(request, requestStartTime,
