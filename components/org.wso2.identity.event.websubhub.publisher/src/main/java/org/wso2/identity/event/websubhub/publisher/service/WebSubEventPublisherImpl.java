@@ -146,8 +146,9 @@ public class WebSubEventPublisherImpl implements EventPublisher {
         CompletableFuture<HttpResponse> future = clientManager.executeAsync(request);
         future.whenCompleteAsync((response, throwable) -> {
             try {
+                MDC.clear();
                 PrivilegedCarbonContext.startTenantFlow();
-                PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(tenantDomain);
+                PrivilegedCarbonContext.getThreadLocalCarbonContext().setTenantDomain(tenantDomain, true);
                 if (StringUtils.isNotBlank(correlationId)) {
                     MDC.put(CORRELATION_ID_MDC, correlationId);
                 }
@@ -195,6 +196,10 @@ public class WebSubEventPublisherImpl implements EventPublisher {
                                         DiagnosticLog.ResultStatus.FAILED,
                                         "Error while reading WebSubHub event publisher");
                                 log.debug("Error while reading WebSubHub response.", e);
+                            } finally {
+                                if (response.getEntity() != null) {
+                                    EntityUtils.consumeQuietly(response.getEntity());
+                                }
                             }
                         }
                     }
@@ -227,6 +232,7 @@ public class WebSubEventPublisherImpl implements EventPublisher {
                 }
                 MDC.remove(TENANT_DOMAIN);
                 PrivilegedCarbonContext.endTenantFlow();
+                MDC.clear();
             }
         }, clientManager.getAsyncCallbackExecutor());
     }
@@ -259,6 +265,10 @@ public class WebSubEventPublisherImpl implements EventPublisher {
                     DiagnosticLog.ResultStatus.FAILED,
                     "Error while reading WebSubHub event publisher response.");
             log.debug("Error while reading WebSubHub event publisher response.", e);
+        } finally {
+            if (response.getEntity() != null) {
+                EntityUtils.consumeQuietly(response.getEntity());
+            }
         }
     }
 }

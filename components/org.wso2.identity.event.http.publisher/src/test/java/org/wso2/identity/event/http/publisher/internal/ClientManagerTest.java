@@ -34,6 +34,7 @@ import org.wso2.identity.event.http.publisher.internal.component.HTTPAdapterData
 import org.wso2.identity.event.http.publisher.internal.config.HTTPAdapterConfiguration;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
@@ -145,6 +146,21 @@ public class ClientManagerTest {
         callbackCaptor.getValue().cancelled();
 
         Assert.assertTrue(future.isCancelled());
+    }
+
+    @Test
+    public void testGetAsyncCallbackExecutor() {
+        Executor executor = clientManager.getAsyncCallbackExecutor();
+        Assert.assertNotNull(executor, "Async callback executor should not be null");
+    }
+
+    @Test
+    public void testGetMaxRetries() {
+        HTTPAdapterConfiguration mockConfiguration = HTTPAdapterDataHolder.getInstance().getAdapterConfiguration();
+        // Set up the mock to return a specific value
+        when(mockConfiguration.getMaxRetries()).thenReturn(3);
+        int maxRetries = clientManager.getMaxRetries();
+        Assert.assertEquals(maxRetries, 3, "Max retries should match the configured value");
     }
 
     @AfterClass
