@@ -18,8 +18,7 @@
 
 package org.wso2.identity.event.websubhub.publisher.internal;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.http.HttpResponse;
@@ -50,6 +49,7 @@ import org.wso2.identity.event.websubhub.publisher.exception.WebSubAdapterExcept
 import org.wso2.identity.event.websubhub.publisher.util.WebSubHubAdapterUtil;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.security.KeyManagementException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
@@ -134,7 +134,9 @@ public class ClientManager {
 
             // Custom handler that logs when the queue is full and discards the task.
             RejectedExecutionHandler handler = (r, executor) -> {
-                LOG.warn("Async callback queue is full; discarding task of publishing events.");
+                LOG.error(
+                        "Async callback queue is full; discarding task of publishing events. " +
+                                "Please attend immediately.");
                 // the task is silently dropped
             };
 
@@ -320,29 +322,28 @@ public class ClientManager {
     /**
      * Create an HTTP POST request.
      *
-     * @param url     The URL for the HTTP POST request.
-     * @param payload The payload to include in the request body.
+     * @param url           The URL for the HTTP POST request.
+     * @param bodyJson      The JSON body for the request.
+     * @param correlationId The correlation ID for tracing.
      * @return A configured HttpPost instance.
      * @throws WebSubAdapterException If an error occurs while creating the request.
      */
-    public HttpPost createHttpPost(String url, Object payload) throws WebSubAdapterException {
+    public HttpPost createHttpPost(String url, String bodyJson, String correlationId)
+            throws WebSubAdapterException {
 
         HttpPost request = new HttpPost(url);
         request.setHeader(ACCEPT, ContentType.APPLICATION_JSON.getMimeType());
         request.setHeader(CONTENT_TYPE, ContentType.APPLICATION_JSON.getMimeType());
-        request.setHeader(CORRELATION_ID_REQUEST_HEADER, WebSubHubAdapterUtil.getCorrelationID());
-
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
-        mapper.setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
-
+        if (StringUtils.isNotBlank(correlationId)) {
+            request.setHeader(CORRELATION_ID_REQUEST_HEADER, correlationId);
+        }
         try {
-            String jsonString = mapper.writeValueAsString(payload);
-            request.setEntity(new StringEntity(jsonString));
-        } catch (IOException e) {
+            if (bodyJson != null) {
+                request.setEntity(new StringEntity(bodyJson));
+            }
+        } catch (UnsupportedEncodingException e) {
             throw WebSubHubAdapterUtil.handleClientException(ERROR_PUBLISHING_EVENT_INVALID_PAYLOAD);
         }
-
         return request;
     }
 

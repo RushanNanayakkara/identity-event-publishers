@@ -27,12 +27,10 @@ import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.utils.URIBuilder;
 import org.apache.http.util.EntityUtils;
-import org.slf4j.MDC;
 import org.wso2.carbon.identity.central.log.mgt.utils.LoggerUtils;
 import org.wso2.carbon.identity.event.publisher.api.constant.ErrorMessage;
 import org.wso2.carbon.identity.event.publisher.api.exception.EventPublisherException;
 import org.wso2.carbon.identity.event.publisher.api.exception.EventPublisherServerException;
-import org.wso2.carbon.identity.event.publisher.api.model.EventContext;
 import org.wso2.carbon.identity.event.publisher.api.model.SecurityEventTokenPayload;
 import org.wso2.carbon.identity.organization.management.service.exception.OrganizationManagementException;
 import org.wso2.carbon.identity.topic.management.api.exception.TopicManagementException;
@@ -48,9 +46,7 @@ import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 
-import static org.wso2.carbon.identity.application.authentication.framework.util.FrameworkUtils.CORRELATION_ID_MDC;
 import static org.wso2.identity.event.websubhub.publisher.constant.WebSubHubAdapterConstants.ErrorMessages.ERROR_BACKEND_ERROR_FROM_WEBSUB_HUB;
 import static org.wso2.identity.event.websubhub.publisher.constant.WebSubHubAdapterConstants.ErrorMessages.ERROR_EMPTY_RESPONSE_FROM_WEBSUB_HUB;
 import static org.wso2.identity.event.websubhub.publisher.constant.WebSubHubAdapterConstants.ErrorMessages.ERROR_INVALID_RESPONSE_FROM_WEBSUB_HUB;
@@ -77,14 +73,9 @@ public class WebSubHubAdapterUtil {
      *
      * @return Correlation ID.
      */
-    public static String getCorrelationID() {
+    public static String getCorrelationID(SecurityEventTokenPayload eventTokenPayload) {
 
-        String correlationID = MDC.get(CORRELATION_ID_MDC);
-        if (StringUtils.isBlank(correlationID)) {
-            correlationID = UUID.randomUUID().toString();
-            MDC.put(CORRELATION_ID_MDC, correlationID);
-        }
-        return correlationID;
+        return eventTokenPayload.getRci();
     }
 
     /**
@@ -215,24 +206,23 @@ public class WebSubHubAdapterUtil {
     /**
      * Print diagnostic log for publisher operations.
      *
-     * @param eventContext Event context.
-     * @param eventPayload Event payload.
-     * @param action       Action performed.
-     * @param status       Result status.
-     * @param message      Result message.
+     * @param eventProfileName Event profile name.
+     * @param eventProfileUri  Event profile URI.
+     * @param events           Events.
+     * @param action           Action performed.
+     * @param status           Result status.
+     * @param message          Result message.
      */
-    public static void printPublisherDiagnosticLog(EventContext eventContext, SecurityEventTokenPayload eventPayload,
+    public static void printPublisherDiagnosticLog(String eventProfileName, String eventProfileUri, String events,
                                                    String action, DiagnosticLog.ResultStatus status, String message) {
 
         if (LoggerUtils.isDiagnosticLogsEnabled()) {
             DiagnosticLog.DiagnosticLogBuilder diagnosticLogBuilder = new DiagnosticLog.DiagnosticLogBuilder(
                     WebSubHubAdapterConstants.LogConstants.WEB_SUB_HUB_ADAPTER, action);
             diagnosticLogBuilder
-                    .inputParam(WebSubHubAdapterConstants.LogConstants.InputKeys.EVENT_URI, eventContext.getEventUri())
-                    .inputParam(WebSubHubAdapterConstants.LogConstants.InputKeys.EVENT_PROFILE_NAME,
-                            eventContext.getEventProfileName())
-                    .inputParam(WebSubHubAdapterConstants.LogConstants.InputKeys.EVENTS,
-                            String.join(",", eventPayload.getEvents().keySet()))
+                    .inputParam(WebSubHubAdapterConstants.LogConstants.InputKeys.EVENT_URI, eventProfileUri)
+                    .inputParam(WebSubHubAdapterConstants.LogConstants.InputKeys.EVENT_PROFILE_NAME, eventProfileName)
+                    .inputParam(WebSubHubAdapterConstants.LogConstants.InputKeys.EVENTS, events)
                     .resultMessage(message)
                     .resultStatus(status)
                     .logDetailLevel(DiagnosticLog.LogDetailLevel.APPLICATION);

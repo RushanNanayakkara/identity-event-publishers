@@ -26,8 +26,10 @@ import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 import org.wso2.carbon.identity.central.log.mgt.utils.LoggerUtils;
+import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
 import org.wso2.carbon.identity.event.publisher.api.exception.EventPublisherException;
 import org.wso2.carbon.identity.event.publisher.api.model.EventContext;
+import org.wso2.carbon.identity.event.publisher.api.model.EventPayload;
 import org.wso2.carbon.identity.event.publisher.api.model.SecurityEventTokenPayload;
 import org.wso2.identity.event.websubhub.publisher.config.WebSubAdapterConfiguration;
 import org.wso2.identity.event.websubhub.publisher.exception.WebSubAdapterException;
@@ -35,6 +37,7 @@ import org.wso2.identity.event.websubhub.publisher.internal.ClientManager;
 import org.wso2.identity.event.websubhub.publisher.internal.WebSubHubAdapterDataHolder;
 import org.wso2.identity.event.websubhub.publisher.util.WebSubHubAdapterUtil;
 
+import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
@@ -65,12 +68,14 @@ public class WebSubEventPublisherImplTest {
     private HttpResponse mockHttpResponse;
 
     private MockedStatic<WebSubHubAdapterDataHolder> mockedStaticDataHolder;
+    private static MockedStatic<IdentityTenantUtil> mockedStaticIdentityTenantUtil;
 
     @BeforeClass
     public void setUp() throws Exception {
 
         mocks = MockitoAnnotations.openMocks(this);
         adapterService = spy(new WebSubEventPublisherImpl());
+        mockIdentityTenantUtil();
 
         mockedStaticDataHolder = mockStatic(WebSubHubAdapterDataHolder.class);
         WebSubHubAdapterDataHolder mockDataHolder = mock(WebSubHubAdapterDataHolder.class);
@@ -113,7 +118,8 @@ public class WebSubEventPublisherImplTest {
             mockedAdapterUtil.when(WebSubHubAdapterUtil::getWebSubBaseURL)
                     .thenReturn("http://mock-websub-hub.com");
             mockedAdapterUtil.when(
-                            () -> WebSubHubAdapterUtil.printPublisherDiagnosticLog(any(), any(), any(), any(), any()))
+                            () -> WebSubHubAdapterUtil
+                                    .printPublisherDiagnosticLog(any(), any(), any(), any(), any(), any()))
                     .then(invocation -> null);
 
             // Mock ClientManager.getMaxRetries()
@@ -130,6 +136,8 @@ public class WebSubEventPublisherImplTest {
                     .jti("jti-token")
                     .iat(System.currentTimeMillis())
                     .aud("audience")
+                    .events(Collections.singletonMap("event1", new EventPayload() {
+                    }))
                     .build();
 
             // Mock HttpPost and its header
@@ -141,7 +149,7 @@ public class WebSubEventPublisherImplTest {
             // Mock ClientManager behavior to simulate success
             CompletableFuture<HttpResponse> future = CompletableFuture.completedFuture(mockHttpResponse);
             when(mockClientManager.executeAsync(any())).thenReturn(future);
-            when(mockClientManager.createHttpPost(any(), any())).thenReturn(mockHttpPost);
+            when(mockClientManager.createHttpPost(any(), any(), any())).thenReturn(mockHttpPost);
             when(mockClientManager.getAsyncCallbackExecutor()).thenReturn((Executor) Runnable::run);
 
             // Execute and verify no exception is thrown
@@ -150,5 +158,18 @@ public class WebSubEventPublisherImplTest {
             // Verify interactions
             verify(mockClientManager, times(1)).executeAsync(any());
         }
+    }
+
+    /**
+     * Mocks the IdentityTenantUtil.
+     */
+     private static void mockIdentityTenantUtil() {
+
+        if (mockedStaticIdentityTenantUtil != null && !mockedStaticIdentityTenantUtil.isClosed()) {
+            mockedStaticIdentityTenantUtil.close();
+        }
+        mockedStaticIdentityTenantUtil = mockStatic(IdentityTenantUtil.class);
+        when(IdentityTenantUtil.isTenantedSessionsEnabled()).thenReturn(false);
+        when(IdentityTenantUtil.getTenantId("test-tenant")).thenReturn(1);
     }
 }

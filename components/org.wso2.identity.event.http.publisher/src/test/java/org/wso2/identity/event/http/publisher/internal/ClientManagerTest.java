@@ -34,6 +34,7 @@ import org.wso2.identity.event.http.publisher.internal.component.HTTPAdapterData
 import org.wso2.identity.event.http.publisher.internal.config.HTTPAdapterConfiguration;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
@@ -78,25 +79,10 @@ public class ClientManagerTest {
 
         TestPayload payload = new TestPayload("mockFieldValue");
         String secret = "testSecret";
-        HttpPost post = clientManager.createHttpPost("http://mock-url.com", payload, secret);
+        HttpPost post = clientManager.createHttpPost("http://mock-url.com", payload.toString(), secret);
         Assert.assertNotNull(post);
         Assert.assertEquals(post.getMethod(), "POST");
         Assert.assertEquals(post.getURI().toString(), "http://mock-url.com");
-    }
-
-    @Test(expectedExceptions = HTTPAdapterException.class)
-    public void testCreateHttpPostException() throws HTTPAdapterException {
-
-        Object payload = new Object() {
-            @Override
-            public String toString() {
-
-                throw new RuntimeException("Simulated IOException trigger");
-            }
-        };
-
-        clientManager = new ClientManager();
-        clientManager.createHttpPost("http://mock-url.com", payload, null);
     }
 
     @Test
@@ -160,6 +146,21 @@ public class ClientManagerTest {
         callbackCaptor.getValue().cancelled();
 
         Assert.assertTrue(future.isCancelled());
+    }
+
+    @Test
+    public void testGetAsyncCallbackExecutor() {
+        Executor executor = clientManager.getAsyncCallbackExecutor();
+        Assert.assertNotNull(executor, "Async callback executor should not be null");
+    }
+
+    @Test
+    public void testGetMaxRetries() {
+        HTTPAdapterConfiguration mockConfiguration = HTTPAdapterDataHolder.getInstance().getAdapterConfiguration();
+        // Set up the mock to return a specific value
+        when(mockConfiguration.getMaxRetries()).thenReturn(3);
+        int maxRetries = clientManager.getMaxRetries();
+        Assert.assertEquals(maxRetries, 3, "Max retries should match the configured value");
     }
 
     @AfterClass
