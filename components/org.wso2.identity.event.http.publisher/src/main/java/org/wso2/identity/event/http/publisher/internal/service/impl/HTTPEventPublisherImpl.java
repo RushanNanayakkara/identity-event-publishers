@@ -26,6 +26,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpPost;
+import org.apache.http.conn.ConnectTimeoutException;
 import org.apache.http.util.EntityUtils;
 import org.slf4j.MDC;
 import org.wso2.carbon.context.PrivilegedCarbonContext;
@@ -45,6 +46,8 @@ import org.wso2.identity.event.http.publisher.internal.constant.HTTPAdapterConst
 import org.wso2.identity.event.http.publisher.internal.util.HTTPAdapterUtil;
 import org.wso2.identity.event.http.publisher.internal.util.HTTPCorrelationLogUtils;
 
+import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -132,7 +135,18 @@ public class HTTPEventPublisherImpl implements EventPublisher {
 
         for (Webhook webhook : activeWebhooks) {
             final String url = webhook.getEndpoint();
-            final String secret = webhook.getSecret();
+            final String secret;
+            try {
+                secret = webhook.getDecryptedSecret();
+            } catch (WebhookMgtException e) {
+                log.error("Error while decrypting secret for webhook: " + webhook.getId() +
+                        ". Event will not be published to the endpoint: " + url, e);
+                printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events, url,
+                        HTTPAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT, DiagnosticLog.ResultStatus.FAILED,
+                        "Failed to decrypt secret for webhook: " + webhook.getName() +
+                                ". Event will not be published to the endpoint: " + url);
+                continue;
+            }
 
             sendWithRetries(eventProfileName, eventProfileUri, events,
                     bodyJson, copiedMDCSnapshot, correlationId, tenantDomain, tenantId, url, secret,
@@ -140,9 +154,6 @@ public class HTTPEventPublisherImpl implements EventPublisher {
         }
     }
 
-    /**
-     * Retries always reuse the frozen snapshots; no shared mutable state is read here.
-     */
     private void sendWithRetries(String eventProfileName, String eventProfileUri, String events, String bodyJson,
                                  Map<String, String> mdcSnapshot, String correlationId, String tenantDomain,
                                  int tenantId, String url, String secret, int retriesLeft) {
@@ -194,14 +205,28 @@ public class HTTPEventPublisherImpl implements EventPublisher {
                                 DiagnosticLog.ResultStatus.SUCCESS, "Event data published to endpoint.");
                         log.debug("HTTP request completed. Response code: " + status +
                                 ", Endpoint: " + url + ", Event URI: " + eventProfileUri);
+                    } else if (status >= 300 && status < 400) {
+                        printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events, url,
+                                HTTPAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
+                                DiagnosticLog.ResultStatus.FAILED,
+                                "Endpoint returned a redirection. Status code: " + status);
+                        log.warn("Endpoint returned a redirection. Status code: " + status + ". Url: " + url);
+                        // No retry for redirection
+                    } else if (status >= 400 && status < 500) {
+                        printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events, url,
+                                HTTPAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
+                                DiagnosticLog.ResultStatus.FAILED,
+                                "Endpoint returned a client error. Status code: " + status);
+                        log.warn("Endpoint returned a client error. Status code: " + status + ". Url: " + url);
+                        // No retry for client error
                     } else {
+                        printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events, url,
+                                HTTPAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
+                                DiagnosticLog.ResultStatus.FAILED,
+                                "Received server error from endpoint. Status code: " + status +
+                                        ". Retrying… (" + retriesLeft + " attempts left)");
+                        log.warn("Received server error from endpoint. Status code: " + status + ". Url: " + url);
                         if (retriesLeft > 0) {
-                            printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events, url,
-                                    HTTPAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
-                                    DiagnosticLog.ResultStatus.FAILED,
-                                    "Publish attempt failed with status code: " + status +
-                                            ". Retrying… (" + retriesLeft + " attempts left)");
-                            // Retry with the SAME snapshots
                             sendWithRetries(eventProfileName, eventProfileUri, events, bodyJson, mdcSnapshot,
                                     correlationId, tenantDomain, tenantId, url, secret, retriesLeft - 1);
                         } else {
@@ -217,29 +242,44 @@ public class HTTPEventPublisherImpl implements EventPublisher {
                         }
                     }
                 } else {
-                    if (retriesLeft > 0) {
+                    // Exception handling and retry for timeouts and IO errors
+                    boolean shouldRetry = false;
+                    String errorMsg = "Failed to publish event data to endpoint. ";
+                    if (throwable.getCause() instanceof SocketTimeoutException ||
+                            throwable.getCause() instanceof ConnectTimeoutException) {
+                        errorMsg += "Request timed out.";
+                        shouldRetry = true;
+                    } else if (throwable.getCause() instanceof IOException) {
+                        errorMsg += "IO error occurred.";
+                        shouldRetry = true;
+                    } else if (throwable.getCause() instanceof IllegalArgumentException) {
+                        errorMsg += "Invalid request.";
+                    } else {
+                        errorMsg += "Unexpected error: " + throwable.getMessage();
+                    }
+
+                    if (shouldRetry && retriesLeft > 0) {
                         printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events, url,
                                 HTTPAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
                                 DiagnosticLog.ResultStatus.FAILED,
-                                "Publish attempt failed due to exception. Retrying… (" +
-                                        retriesLeft + " attempts left)");
-                        // Retry with the SAME snapshots
+                                errorMsg + " Retrying… (" + retriesLeft + " attempts left)");
+                        log.warn(errorMsg + " Url: " + url + " Retrying… (" + retriesLeft + " attempts left)");
                         sendWithRetries(eventProfileName, eventProfileUri, events, bodyJson, mdcSnapshot, correlationId,
                                 tenantDomain, tenantId, url, secret, retriesLeft - 1);
                     } else {
+                        errorMsg = errorMsg + (shouldRetry ? " Maximum retries reached." : "");
                         handleResponseCorrelationLog(request, requestStartTime,
                                 HTTPCorrelationLogUtils.RequestStatus.FAILED.getStatus(),
                                 throwable.getMessage());
                         printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events, url,
                                 HTTPAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
-                                DiagnosticLog.ResultStatus.FAILED,
-                                "Failed to publish event data to endpoint. Maximum retries reached.");
-                        log.warn("Failed to publish event data to endpoint: " + url + ". Maximum retries reached.");
-                        log.debug("Failed to publish event data to endpoint: " + url, throwable);
+                                DiagnosticLog.ResultStatus.FAILED, errorMsg);
+                        log.warn(errorMsg);
+                        log.debug(errorMsg, throwable);
                     }
                 }
             } finally {
-                if (response.getEntity() != null) {
+                if (response != null && response.getEntity() != null) {
                     EntityUtils.consumeQuietly(response.getEntity());
                 }
                 if (StringUtils.isNotEmpty(correlationId)) {

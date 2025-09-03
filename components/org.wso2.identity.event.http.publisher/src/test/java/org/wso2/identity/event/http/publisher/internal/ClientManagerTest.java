@@ -33,6 +33,7 @@ import org.wso2.identity.event.http.publisher.internal.component.ClientManager;
 import org.wso2.identity.event.http.publisher.internal.component.HTTPAdapterDataHolder;
 import org.wso2.identity.event.http.publisher.internal.config.HTTPAdapterConfiguration;
 
+import java.lang.reflect.Field;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
@@ -150,17 +151,42 @@ public class ClientManagerTest {
 
     @Test
     public void testGetAsyncCallbackExecutor() {
+
         Executor executor = clientManager.getAsyncCallbackExecutor();
         Assert.assertNotNull(executor, "Async callback executor should not be null");
     }
 
     @Test
     public void testGetMaxRetries() {
+
         HTTPAdapterConfiguration mockConfiguration = HTTPAdapterDataHolder.getInstance().getAdapterConfiguration();
         // Set up the mock to return a specific value
         when(mockConfiguration.getMaxRetries()).thenReturn(3);
         int maxRetries = clientManager.getMaxRetries();
         Assert.assertEquals(maxRetries, 3, "Max retries should match the configured value");
+    }
+
+    @Test
+    public void testGetHttpAsyncClientStartsIfNotRunning() throws Exception {
+        // Create a spy of ClientManager to inject a mock CloseableHttpAsyncClient
+        ClientManager spyManager = spy(clientManager);
+        CloseableHttpAsyncClient mockAsyncClient = mock(CloseableHttpAsyncClient.class);
+
+        // Inject the mock into the private field using reflection
+        Field field = ClientManager.class.getDeclaredField("httpAsyncClient");
+        field.setAccessible(true);
+        field.set(spyManager, mockAsyncClient);
+
+        // Case 1: Not running, should call start()
+        when(mockAsyncClient.isRunning()).thenReturn(false);
+        spyManager.getHttpAsyncClient();
+        verify(mockAsyncClient).start();
+
+        // Case 2: Already running, should NOT call start() again
+        when(mockAsyncClient.isRunning()).thenReturn(true);
+        spyManager.getHttpAsyncClient();
+        // start() should still only be called once
+        verify(mockAsyncClient).start();
     }
 
     @AfterClass

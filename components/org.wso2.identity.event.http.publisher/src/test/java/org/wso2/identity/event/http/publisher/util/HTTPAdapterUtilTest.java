@@ -18,12 +18,18 @@
 
 package org.wso2.identity.event.http.publisher.util;
 
+import org.mockito.MockedStatic;
 import org.testng.Assert;
 import org.testng.annotations.Test;
+import org.wso2.carbon.identity.central.log.mgt.utils.LoggerUtils;
+import org.wso2.carbon.utils.DiagnosticLog;
 import org.wso2.identity.event.http.publisher.api.exception.HTTPAdapterClientException;
 import org.wso2.identity.event.http.publisher.api.exception.HTTPAdapterServerException;
 import org.wso2.identity.event.http.publisher.internal.constant.ErrorMessage;
 import org.wso2.identity.event.http.publisher.internal.util.HTTPAdapterUtil;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mockStatic;
 
 /**
  * Unit tests for HTTPAdapterUtil class.
@@ -46,5 +52,26 @@ public class HTTPAdapterUtilTest {
                 ErrorMessage.ERROR_GETTING_ASYNC_CLIENT, new Exception("Test Exception"));
         Assert.assertNotNull(exception);
         Assert.assertTrue(exception.getMessage().contains("Error getting the async client to publish events."));
+    }
+
+    @Test
+    public void testPrintPublisherDiagnosticLog() {
+
+        try (MockedStatic<LoggerUtils> mockedLoggerUtils = mockStatic(LoggerUtils.class)) {
+            mockedLoggerUtils.when(LoggerUtils::isDiagnosticLogsEnabled).thenReturn(true);
+            mockedLoggerUtils.when(() -> LoggerUtils.triggerDiagnosticLogEvent(any())).then(invocation -> null);
+
+            HTTPAdapterUtil.printPublisherDiagnosticLog(
+                    "profileName",
+                    "profileUri",
+                    "event1,event2",
+                    "http://endpoint",
+                    "PUBLISH_EVENT",
+                    DiagnosticLog.ResultStatus.SUCCESS,
+                    "Published successfully"
+            );
+
+            mockedLoggerUtils.verify(() -> LoggerUtils.triggerDiagnosticLogEvent(any()));
+        }
     }
 }
