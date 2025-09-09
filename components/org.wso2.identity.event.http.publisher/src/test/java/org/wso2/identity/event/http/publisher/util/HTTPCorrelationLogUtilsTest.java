@@ -87,4 +87,20 @@ public class HTTPCorrelationLogUtilsTest {
             verify(mockLog, atLeastOnce()).info(anyString());
         }
     }
+
+    @Test
+    public void testRequestStatusEnum() {
+
+        HTTPCorrelationLogUtils.RequestStatus completed = HTTPCorrelationLogUtils.RequestStatus.COMPLETED;
+        HTTPCorrelationLogUtils.RequestStatus failed = HTTPCorrelationLogUtils.RequestStatus.FAILED;
+        HTTPCorrelationLogUtils.RequestStatus cancelled = HTTPCorrelationLogUtils.RequestStatus.CANCELLED;
+
+        assert "completed".equals(completed.getStatus());
+        assert "failed".equals(failed.getStatus());
+        assert "cancelled".equals(cancelled.getStatus());
+
+        HTTPCorrelationLogUtils.RequestStatus[] values = HTTPCorrelationLogUtils.RequestStatus.values();
+        assert values.length == 3;
+        assert HTTPCorrelationLogUtils.RequestStatus.valueOf("COMPLETED") == completed;
+    }
 }

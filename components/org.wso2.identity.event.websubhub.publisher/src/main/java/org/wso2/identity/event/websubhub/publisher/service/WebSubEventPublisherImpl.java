@@ -141,7 +141,7 @@ public class WebSubEventPublisherImpl implements EventPublisher {
             printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events,
                     WebSubHubAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT, DiagnosticLog.ResultStatus.FAILED,
                     "Failed to construct HTTP request for WebSubHub publish.");
-            log.warn("Failed to construct HTTP request for WebSubHub publish. No retries will be attempted.", e);
+            log.error("Failed to construct HTTP request for WebSubHub publish. No retries will be attempted.", e);
             return;
         }
 
@@ -174,29 +174,34 @@ public class WebSubEventPublisherImpl implements EventPublisher {
                     if (status >= 200 && status < 300) {
                         handleAsyncResponse(eventProfileName, eventProfileUri, events, response, request,
                                 requestStartTime);
+                    } else if (status >= 300 && status < 400) {
+                        printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events,
+                                WebSubHubAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
+                                DiagnosticLog.ResultStatus.FAILED,
+                                "WebSubHub endpoint returned a redirection. Status code: " + status);
+                        log.error("WebSubHub endpoint returned a redirection. Status code: " + status);
+                    } else if (status >= 400 && status < 500) {
+                        printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events,
+                                WebSubHubAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
+                                DiagnosticLog.ResultStatus.FAILED,
+                                "WebSubHub endpoint returned a client error. Status code: " + status);
+                        log.error("WebSubHub endpoint returned a client error. Status code: " + status);
                     } else {
-                        if (retriesLeft > 0) {
-                            printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events,
-                                    WebSubHubAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
-                                    DiagnosticLog.ResultStatus.FAILED,
-                                    "Publish attempt failed with status code: " + status +
-                                            ". Retrying… (" + retriesLeft + " attempts left)");
-                            log.debug("Publish attempt failed with status code: " + status +
-                                    ". Retrying… (" + retriesLeft + " attempts left)");
+                        String msg = "Received server error from websubhub endpoint. Status code: " + status;
+                        boolean canRetry = retriesLeft > 0;
+                        String retryMsg = canRetry ? " Retrying… (" + retriesLeft + " attempts left)" :
+                                " Maximum retries reached.";
+                        printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events,
+                                WebSubHubAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
+                                DiagnosticLog.ResultStatus.FAILED, msg + "." + retryMsg);
+                        log.error(msg + ". " + retryMsg);
+                        if (canRetry) {
                             sendWithRetries(eventProfileName, eventProfileUri, events, bodyJson, mdcSnapshot,
                                     correlationId, tenantDomain, tenantId, url, retriesLeft - 1);
                         } else {
                             handleResponseCorrelationLog(request, requestStartTime,
                                     WebSubHubCorrelationLogUtils.RequestStatus.FAILED.getStatus(),
-                                    String.valueOf(status),
-                                    response.getStatusLine().getReasonPhrase());
-                            printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events,
-                                    WebSubHubAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
-                                    DiagnosticLog.ResultStatus.FAILED,
-                                    "Failed to publish event data to WebSubHub. Status code: " + status +
-                                            ". Maximum retries reached.");
-                            log.error("Failed to publish event data to WebSubHub: " + url +
-                                    ". Maximum retries reached.");
+                                    String.valueOf(status), response.getStatusLine().getReasonPhrase());
                             try {
                                 if (response.getEntity() != null) {
                                     String body = EntityUtils.toString(response.getEntity());
@@ -219,14 +224,28 @@ public class WebSubEventPublisherImpl implements EventPublisher {
                         }
                     }
                 } else {
-                    if (retriesLeft > 0) {
+                    boolean shouldRetry = false;
+                    String errorMsg = "Failed to publish event data to WebSubHub. ";
+                    Throwable cause = throwable.getCause();
+                    if (cause instanceof java.net.SocketTimeoutException ||
+                            cause instanceof org.apache.http.conn.ConnectTimeoutException) {
+                        errorMsg += "Request timed out.";
+                        shouldRetry = true;
+                    } else if (cause instanceof IOException) {
+                        errorMsg += "IO error occurred.";
+                        shouldRetry = true;
+                    } else if (cause instanceof IllegalArgumentException) {
+                        errorMsg += "Invalid request.";
+                    } else {
+                        errorMsg += "Unexpected error: " + throwable.getMessage();
+                    }
+
+                    if (shouldRetry && retriesLeft > 0) {
+                        String retryMsg = ". Retrying… (" + retriesLeft + " attempts left)";
                         printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events,
                                 WebSubHubAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
-                                DiagnosticLog.ResultStatus.FAILED,
-                                "Publish attempt failed due to exception. Retrying… (" +
-                                        retriesLeft + " attempts left)");
-                        log.debug("Publish attempt failed due to exception. Retrying… (" +
-                                retriesLeft + " attempts left)", throwable);
+                                DiagnosticLog.ResultStatus.FAILED, errorMsg + retryMsg);
+                        log.error(errorMsg + retryMsg);
                         sendWithRetries(eventProfileName, eventProfileUri, events, bodyJson, mdcSnapshot, correlationId,
                                 tenantDomain, tenantId, url, retriesLeft - 1);
                     } else {
@@ -236,12 +255,15 @@ public class WebSubEventPublisherImpl implements EventPublisher {
                         printPublisherDiagnosticLog(eventProfileName, eventProfileUri, events,
                                 WebSubHubAdapterConstants.LogConstants.ActionIDs.PUBLISH_EVENT,
                                 DiagnosticLog.ResultStatus.FAILED,
-                                "Failed to publish event data to WebSubHub. Maximum retries reached.");
-                        log.error("Failed to publish event data to WebSubHub: " + url +
-                                ". Maximum retries reached.");
+                                errorMsg + (shouldRetry ? " Maximum retries reached." : ""));
+                        log.error(errorMsg + ". " + (shouldRetry ? " Maximum retries reached." : ""));
+                        log.debug(errorMsg, throwable);
                     }
                 }
             } finally {
+                if (response != null && response.getEntity() != null) {
+                    EntityUtils.consumeQuietly(response.getEntity());
+                }
                 if (StringUtils.isNotBlank(correlationId)) {
                     MDC.remove(CORRELATION_ID_MDC);
                 }
