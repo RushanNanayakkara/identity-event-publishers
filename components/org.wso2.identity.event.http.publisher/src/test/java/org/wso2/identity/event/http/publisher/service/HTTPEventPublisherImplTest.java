@@ -23,18 +23,23 @@ import org.apache.http.client.methods.HttpPost;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.MockitoAnnotations;
-import org.testng.annotations.AfterClass;
-import org.testng.annotations.BeforeClass;
+import org.testng.Assert;
+import org.testng.annotations.AfterMethod;
+import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 import org.wso2.carbon.identity.central.log.mgt.utils.LoggerUtils;
 import org.wso2.carbon.identity.core.util.IdentityTenantUtil;
+import org.wso2.carbon.identity.event.publisher.api.exception.EventPublisherServerException;
 import org.wso2.carbon.identity.event.publisher.api.model.EventContext;
 import org.wso2.carbon.identity.event.publisher.api.model.EventPayload;
 import org.wso2.carbon.identity.event.publisher.api.model.SecurityEventTokenPayload;
+import org.wso2.carbon.identity.webhook.management.api.exception.WebhookMgtException;
 import org.wso2.carbon.identity.webhook.management.api.model.Webhook;
 import org.wso2.identity.event.http.publisher.internal.component.ClientManager;
 import org.wso2.identity.event.http.publisher.internal.component.HTTPAdapterDataHolder;
+import org.wso2.identity.event.http.publisher.internal.constant.HTTPAdapterConstants;
 import org.wso2.identity.event.http.publisher.internal.service.impl.HTTPEventPublisherImpl;
+import org.wso2.identity.event.http.publisher.internal.util.HTTPAdapterUtil;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -45,6 +50,7 @@ import java.util.concurrent.Executor;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -64,7 +70,7 @@ public class HTTPEventPublisherImplTest {
     private MockedStatic<HTTPAdapterDataHolder> mockedStaticDataHolder;
     private static MockedStatic<IdentityTenantUtil> mockedStaticIdentityTenantUtil;
 
-    @BeforeClass
+    @BeforeMethod
     public void setUp() throws Exception {
 
         mocks = MockitoAnnotations.openMocks(this);
@@ -76,32 +82,11 @@ public class HTTPEventPublisherImplTest {
         mockedStaticDataHolder.when(HTTPAdapterDataHolder::getInstance).thenReturn(mockDataHolder);
 
         when(mockDataHolder.getClientManager()).thenReturn(mockClientManager);
-
-        // Mock active webhooks
-        Webhook webhook1 = mock(Webhook.class);
-        when(webhook1.getEndpoint()).thenReturn("http://mock-endpoint-1.com");
-        when(webhook1.getSecret()).thenReturn("secret1");
-        Webhook webhook2 = mock(Webhook.class);
-        when(webhook2.getEndpoint()).thenReturn("http://mock-endpoint-2.com");
-        when(webhook2.getSecret()).thenReturn("secret2");
-        List<Webhook> webhooks = Arrays.asList(webhook1, webhook2);
-
-        // Mock getActiveWebhooks to return our list
         when(mockDataHolder.getWebhookManagementService()).thenReturn(
                 mock(org.wso2.carbon.identity.webhook.management.api.service.WebhookManagementService.class));
-        when(mockDataHolder.getWebhookManagementService().getActiveWebhooks(any(), any(), any(), any()))
-                .thenReturn(webhooks);
-
-        EventContext eventContext = EventContext.builder()
-                .tenantDomain("test-tenant")
-                .eventProfileName("WSO2")
-                .eventUri("test-uri")
-                .eventProfileVersion("v1")
-                .build();
-        adapterService.canHandleEvent(eventContext);
     }
 
-    @AfterClass
+    @AfterMethod
     public void tearDown() throws Exception {
 
         if (mocks != null) {
@@ -118,6 +103,17 @@ public class HTTPEventPublisherImplTest {
         try (MockedStatic<LoggerUtils> mockedLoggerUtils = mockStatic(LoggerUtils.class)) {
             mockedLoggerUtils.when(LoggerUtils::isDiagnosticLogsEnabled).thenReturn(false);
 
+            HTTPAdapterDataHolder mockDataHolder = HTTPAdapterDataHolder.getInstance();
+            Webhook webhook1 = mock(Webhook.class);
+            when(webhook1.getEndpoint()).thenReturn("http://mock-endpoint-1.com");
+            when(webhook1.getDecryptedSecret()).thenReturn("secret1");
+            Webhook webhook2 = mock(Webhook.class);
+            when(webhook2.getEndpoint()).thenReturn("http://mock-endpoint-2.com");
+            when(webhook2.getDecryptedSecret()).thenReturn("secret2");
+            List<Webhook> webhooks = Arrays.asList(webhook1, webhook2);
+            when(mockDataHolder.getWebhookManagementService().getActiveWebhooks(any(), any(), any(), any()))
+                    .thenReturn(webhooks);
+
             EventContext eventContext = EventContext.builder()
                     .tenantDomain("test-tenant")
                     .eventProfileName("WSO2")
@@ -132,25 +128,103 @@ public class HTTPEventPublisherImplTest {
                     }))
                     .build();
 
-            // Mock ClientManager behavior to simulate success
             CompletableFuture<HttpResponse> future = CompletableFuture.completedFuture(mockHttpResponse);
             when(mockClientManager.executeAsync(any())).thenReturn(future);
-            when(mockClientManager.createHttpPost(any(), any(), any())).thenReturn(
-                    mock(HttpPost.class));
+            when(mockClientManager.createHttpPost(any(), any(), any())).thenReturn(mock(HttpPost.class));
             when(mockClientManager.getAsyncCallbackExecutor()).thenReturn((Executor) Runnable::run);
 
-            // Execute and verify no exception is thrown
             adapterService.publish(payload, eventContext);
 
-            // Verify interactions for each webhook
             verify(mockClientManager, times(2)).executeAsync(any());
             verify(mockClientManager, times(2)).createHttpPost(any(), any(), any());
         }
     }
 
-    /**
-     * Mocks the IdentityTenantUtil.
-     */
+    @Test
+    public void testGetAssociatedAdapter() {
+
+        Assert.assertEquals(adapterService.getAssociatedAdapter(), HTTPAdapterConstants.HTTP_ADAPTER_NAME);
+    }
+
+    @Test
+    public void testPublishWithNoActiveWebhooks() throws Exception {
+
+        HTTPAdapterDataHolder mockDataHolder = HTTPAdapterDataHolder.getInstance();
+        when(mockDataHolder.getWebhookManagementService().getActiveWebhooks(any(), any(), any(), any()))
+                .thenReturn(Collections.emptyList());
+
+        EventContext eventContext = EventContext.builder()
+                .tenantDomain("test-tenant")
+                .eventProfileName("WSO2")
+                .eventUri("test-uri")
+                .build();
+        SecurityEventTokenPayload payload = SecurityEventTokenPayload.builder()
+                .iss("issuer")
+                .jti("jti-token")
+                .iat(System.currentTimeMillis())
+                .aud("audience")
+                .events(Collections.singletonMap("event1", new EventPayload() {
+                }))
+                .build();
+
+        adapterService.publish(payload, eventContext);
+        verify(mockClientManager, never()).executeAsync(any());
+    }
+
+    @Test(expectedExceptions = EventPublisherServerException.class)
+    public void testCanHandleEventThrowsWebhookMgtException() throws Exception {
+
+        HTTPAdapterDataHolder mockDataHolder = HTTPAdapterDataHolder.getInstance();
+        when(mockDataHolder.getWebhookManagementService().getActiveWebhooks(any(), any(), any(), any()))
+                .thenThrow(new WebhookMgtException("error"));
+        EventContext eventContext = EventContext.builder()
+                .tenantDomain("test-tenant")
+                .eventProfileName("WSO2")
+                .eventUri("test-uri")
+                .build();
+        adapterService.canHandleEvent(eventContext);
+    }
+
+    @Test
+    public void testPublishJsonSerializationFailure() throws Exception {
+
+        try (MockedStatic<LoggerUtils> mockedLoggerUtils = mockStatic(LoggerUtils.class);
+             MockedStatic<HTTPAdapterUtil> mockedAdapterUtil = mockStatic(HTTPAdapterUtil.class)) {
+            mockedLoggerUtils.when(LoggerUtils::isDiagnosticLogsEnabled).thenReturn(false);
+
+            HTTPAdapterDataHolder mockDataHolder = HTTPAdapterDataHolder.getInstance();
+            Webhook webhook = mock(Webhook.class);
+            when(webhook.getEndpoint()).thenReturn("http://mock-endpoint.com");
+            when(webhook.getDecryptedSecret()).thenReturn("secret");
+            when(mockDataHolder.getWebhookManagementService().getActiveWebhooks(any(), any(), any(), any()))
+                    .thenReturn(Collections.singletonList(webhook));
+
+            // Use a payload that Jackson cannot serialize (self-referencing)
+            class SelfRef extends EventPayload {
+
+                public SelfRef self;
+            }
+            SelfRef selfRef = new SelfRef();
+            selfRef.self = selfRef;
+
+            EventContext eventContext = EventContext.builder()
+                    .tenantDomain("test-tenant")
+                    .eventProfileName("WSO2")
+                    .eventUri("test-uri")
+                    .build();
+            SecurityEventTokenPayload payload = SecurityEventTokenPayload.builder()
+                    .iss("issuer")
+                    .jti("jti-token")
+                    .iat(System.currentTimeMillis())
+                    .aud("audience")
+                    .events(Collections.singletonMap("event1", selfRef))
+                    .build();
+
+            adapterService.publish(payload, eventContext);
+            // Should not throw, just log and return
+        }
+    }
+
     private static void mockIdentityTenantUtil() {
 
         if (mockedStaticIdentityTenantUtil != null && !mockedStaticIdentityTenantUtil.isClosed()) {
